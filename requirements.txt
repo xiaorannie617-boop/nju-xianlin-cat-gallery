@@ -1,0 +1,9 @@
+Flask
+gunicorn
+python-docx
+pandas
+openpyxl
+numpy
+scikit-learn
+sentence-transformers
+modelscope

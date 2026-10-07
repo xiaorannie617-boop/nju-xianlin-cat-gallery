@@ -9,7 +9,16 @@ from sklearn.metrics.pairwise import cosine_similarity
 # 1. 模型
 # ============================================================
 
-MODEL_PATH = r"C:\Users\20693\.cache\modelscope\models\AI-ModelScope--bge-small-zh-v1.5\snapshots\master"
+import os
+
+LOCAL_MODEL_PATH = r"C:\Users\20693\.cache\modelscope\models\AI-ModelScope--bge-small-zh-v1.5\snapshots\master"
+
+if os.path.exists(LOCAL_MODEL_PATH):
+    print("使用本地《猫苑》匹配模型：", LOCAL_MODEL_PATH)
+    MODEL_PATH = LOCAL_MODEL_PATH
+else:
+    print("本地模型不存在，使用在线模型：BAAI/bge-small-zh-v1.5")
+    MODEL_PATH = "BAAI/bge-small-zh-v1.5"
 
 model = SentenceTransformer(MODEL_PATH)
 
