@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>校园猫咪图鉴</title>
+
+<link rel="stylesheet" href="style.css">
+
+</head>
+
+
+<body>
+
+
+<div class="container">
+
+
+<h1>
+🐱 校园猫咪图鉴
+</h1>
+
+
+<p class="subtitle">
+记录校园里的每一只猫咪
+</p>
+
+
+
+<div class="stat">
+
+目前收录：
+<span id="catCount">
+0
+</span>
+只猫咪
+
+</div>
+
+
+
+<div class="search-box">
+
+
+<input
+id="catName"
+placeholder="请输入猫咪名字，例如：小橘">
+
+
+<button onclick="searchCat()">
+搜索
+</button>
+
+
+</div>
+
+    <!-- ==================================================
+     活动区域筛选
+     ================================================== -->
+
+<div class="area-filter">
+
+    <div class="area-title">
+        📍 按活动区域浏览
+    </div>
+
+    <div id="areaButtons" class="area-buttons">
+
+        <!-- JavaScript 自动生成区域按钮 -->
+
+    </div>
+
+</div>
+
+<!-- ============================================================
+     地图模式
+     ============================================================ -->
+
+<div
+    id="mapView"
+    class="campus-map-section map-view-hidden"
+>
+
+    <div class="map-view-header">
+
+        <div class="area-title">
+            🗺️ 仙林校区猫咪地图
+        </div>
+
+        <button
+            type="button"
+            class="map-back-button"
+            onclick="showCatView()"
+        >
+            ← 返回猫咪图鉴
+        </button>
+
+    </div>
+
+
+    <div class="campus-map-wrapper">
+
+        <img
+            src="images/campus-map.jpg"
+            alt="南京大学仙林校区导示图"
+            class="campus-map"
+        >
+
+        <div
+            id="mapMarkers"
+            class="map-markers"
+        ></div>
+
+    </div>
+
+</div>
+
+
+
+<h2>
+🐾 猫咪档案
+</h2>
+
+
+    <!-- ============================================================
+     首页视图切换
+     ============================================================ -->
+
+<div class="view-switch">
+
+    <button
+        id="catViewButton"
+        class="view-switch-button active"
+        type="button"
+        onclick="showCatView()"
+    >
+        🐱 猫咪图鉴
+    </button>
+
+    <button
+        id="mapViewButton"
+        class="view-switch-button"
+        type="button"
+        onclick="showMapView()"
+    >
+        🗺️ 查看地图
+    </button>
+
+</div>
+<div id="catList"
+class="cat-list">
+
+</div>
+
+
+
+<div id="result">
+
+</div>
+
+
+
+</div>
+
+
+
+<script src="script.js"></script>
+
+
+</body>
+
+</html>

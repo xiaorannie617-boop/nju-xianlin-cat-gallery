@@ -1,0 +1,2106 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8">
+
+<title>
+猫咪管理后台
+</title>
+
+<style>
+
+/* =========================
+   页面基础
+========================= */
+
+body {
+
+    margin: 0;
+
+    padding: 40px;
+
+    background: #f6f1e8;
+
+    color: #4e4032;
+
+    font-family:
+        "Microsoft YaHei",
+        sans-serif;
+
+}
+
+
+h1 {
+
+    text-align: center;
+
+    color: #5c4938;
+
+}
+
+
+h2 {
+
+    color: #6b5846;
+
+}
+
+
+hr {
+
+    border: none;
+
+    border-top:
+        1px solid #d8cbb9;
+
+    margin: 30px 0;
+
+}
+
+
+/* =========================
+   地图管理
+========================= */
+
+.map-admin-section {
+
+    max-width: 1000px;
+
+    margin: 30px auto;
+
+}
+
+
+.map-admin-title {
+
+    margin-bottom: 15px;
+
+}
+
+
+.map-admin-tip {
+
+    padding: 12px 16px;
+
+    margin-bottom: 15px;
+
+    background: #eee5d8;
+
+    border-radius: 10px;
+
+    line-height: 1.7;
+
+}
+
+
+.map-admin-controls {
+
+    margin-bottom: 20px;
+
+}
+
+
+.map-admin-controls select {
+
+    padding: 8px 12px;
+
+    border:
+        1px solid #cdbda8;
+
+    border-radius: 8px;
+
+    background: white;
+
+    color: #4e4032;
+
+    font-size: 14px;
+
+}
+
+
+#mapAdminWrapper {
+
+    position: relative;
+
+    width: 100%;
+
+    overflow: hidden;
+
+    border-radius: 14px;
+
+    background: #eee7dc;
+
+    padding: 10px;
+
+    box-sizing: border-box;
+
+    box-shadow:
+        0 6px 20px
+        rgba(80,60,40,0.15);
+
+}
+
+
+#mapAdmin {
+
+    display: block;
+
+    width: 100%;
+
+    height: auto;
+
+    border-radius: 10px;
+
+}
+
+
+#mapAdminMarker {
+
+    position: absolute;
+
+    width: 22px;
+
+    height: 22px;
+
+    border-radius: 50%;
+
+    background: #8b5e3c;
+
+    border: 4px solid white;
+
+    box-shadow:
+        0 3px 10px
+        rgba(0,0,0,0.3);
+
+    transform:
+        translate(-50%, -50%);
+
+    display: none;
+
+    pointer-events: none;
+
+}
+
+
+#mapAdminInfo {
+
+    margin-top: 15px;
+
+    padding: 12px 16px;
+
+    background: white;
+
+    border-radius: 10px;
+
+    line-height: 1.7;
+
+}
+
+
+#saveMapAreaButton {
+
+    margin-top: 15px;
+
+    padding: 10px 20px;
+
+    border: none;
+
+    border-radius: 8px;
+
+    background: #665441;
+
+    color: white;
+
+    cursor: pointer;
+
+    font-size: 14px;
+
+}
+
+
+#saveMapAreaButton:hover {
+
+    background: #4e4032;
+
+}
+
+
+/* =========================
+   猫咪列表
+========================= */
+
+#catList {
+
+    max-width: 1000px;
+
+    margin: auto;
+
+}
+
+
+.cat-item {
+
+    padding: 15px;
+
+    margin-bottom: 15px;
+
+    background: white;
+
+    border-radius: 10px;
+
+    box-shadow:
+        0 3px 10px
+        rgba(80,60,40,0.08);
+
+}
+
+
+/* =========================
+   录入区域
+========================= */
+
+.cat-form {
+
+    max-width: 800px;
+
+}
+
+
+.cat-form input {
+
+    padding: 7px;
+
+    margin-left: 10px;
+
+    border:
+        1px solid #d2c4b1;
+
+    border-radius: 6px;
+
+}
+
+
+.main-button {
+
+    padding: 10px 22px;
+
+    border: none;
+
+    border-radius: 8px;
+
+    background: #665441;
+
+    color: white;
+
+    cursor: pointer;
+
+}
+
+
+</style>
+
+</head>
+
+
+<body>
+
+
+<h1>
+🐱 猫咪录入后台
+</h1>
+
+<hr>
+
+
+<!-- ==================================================
+     地图区域管理
+================================================== -->
+
+<div class="map-admin-section">
+
+    <h2 class="map-admin-title">
+        🗺️ 校园地图区域管理
+    </h2>
+
+
+    <div class="map-admin-tip">
+
+        <b>使用方法：</b>
+
+        <br>
+
+        ① 先选择一个活动区域
+
+        <br>
+
+        ② 然后在下面的校园地图上点击对应位置
+
+        <br>
+
+        ③ 最后点击“保存地图位置”
+
+        <br>
+
+        以后这个活动区域的猫咪都会自动显示在这里。
+
+    </div>
+
+
+    <div class="map-admin-controls">
+
+    <p>
+
+        <label>
+            猫咪活动区域：
+        </label>
+
+
+        <select id="mapAreaSelect">
+
+            <option value="">
+                —— 请选择活动区域 ——
+            </option>
+
+        </select>
+
+    </p>
+
+        <p>
+
+    <label>
+        新增地图区域：
+    </label>
+
+    <input
+        id="newMapAreaName"
+        type="text"
+        placeholder="例如：图书馆"
+        style="
+            padding:8px 12px;
+            width:220px;
+            border:1px solid #cdbda8;
+            border-radius:8px;
+            margin-left:10px;
+        "
+    >
+
+    <button
+        type="button"
+        onclick="createMapArea()"
+        style="
+            margin-left:10px;
+            padding:8px 16px;
+            border:none;
+            border-radius:8px;
+            background:#665441;
+            color:white;
+            cursor:pointer;
+        "
+    >
+        ➕ 新增区域
+    </button>
+
+</p>
+
+
+    <p>
+
+        <label>
+            地图标准地点：
+        </label>
+
+
+        <input
+            id="mapPlaceName"
+            type="text"
+            placeholder="例如：学生公寓7幢"
+            style="
+                padding:8px 12px;
+                width:220px;
+                border:1px solid #cdbda8;
+                border-radius:8px;
+                margin-left:10px;
+            "
+        >
+
+    </p>
+
+
+    <div
+        style="
+            margin-top:10px;
+            color:#766c60;
+            font-size:14px;
+            line-height:1.7;
+        "
+    >
+
+        💡 例如：
+
+        <br>
+
+        猫咪活动区域填写的是
+        <b>宿舍7栋</b>
+
+        <br>
+
+        地图上的正式建筑名称填写
+        <b>学生公寓7幢</b>
+
+        <br>
+
+        这样以后“宿舍7栋”的猫咪就可以自动定位到
+        “学生公寓7幢”。
+
+    </div>
+
+</div>
+
+
+    <div id="mapAdminWrapper">
+
+        <img
+            id="mapAdmin"
+            src="images/campus-map.jpg"
+            alt="南京大学仙林校区地图"
+        >
+
+
+        <div id="mapAdminMarker"></div>
+
+    </div>
+
+
+    <div id="mapAdminInfo">
+
+        当前还没有选择地图位置。
+
+    </div>
+
+
+    <button
+        id="saveMapAreaButton"
+        onclick="saveMapArea()"
+    >
+
+        💾 保存地图位置
+
+    </button>
+
+</div>
+
+
+<hr>
+
+
+<h2>
+已有猫咪
+</h2>
+
+
+<div id="catList">
+
+正在加载...
+
+</div>
+
+
+<div style="
+    max-width:1000px;
+    margin:20px auto;
+    text-align:right;
+">
+
+    <button
+        class="main-button"
+        onclick="rematchAllCats()"
+    >
+        🔄 重新匹配全部猫咪
+    </button>
+
+</div>
+
+
+<hr>
+
+
+<div class="cat-form">
+
+
+<p>
+名字：
+<input id="name">
+</p>
+
+
+<p>
+活动区域：
+
+<select id="area">
+
+    <option value="">
+        —— 请先选择活动区域 ——
+    </option>
+
+</select>
+
+</p>
+
+
+<p>
+照片：
+
+<input
+type="file"
+id="photoFile">
+
+</p>
+
+
+<p>
+毛色：
+<input id="color">
+</p>
+
+
+<p>
+体型：
+<input id="size">
+</p>
+
+
+<p>
+性格：
+<input id="personality">
+</p>
+
+
+<p>
+常见行为：
+<input id="behavior">
+</p>
+
+
+<p>
+发现地点：
+<input id="place">
+</p>
+
+
+<p>
+备注：
+<input id="note">
+</p>
+
+
+<button
+class="main-button"
+onclick="addCat()"
+>
+
+保存猫咪
+
+</button>
+
+</div>
+
+
+<script>
+
+    // =========================
+// 重新匹配全部猫咪
+// =========================
+
+async function rematchAllCats() {
+
+    const confirmed =
+        confirm(
+            "确定要重新匹配全部猫咪的《猫苑》评价吗？"
+        );
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/rematch_all",
+                {
+                    method: "POST"
+                }
+            );
+
+        const result =
+            await response.json();
+
+        if (!response.ok) {
+
+            throw new Error(
+                result.message ||
+                "重新匹配失败"
+            );
+
+        }
+
+        alert(
+            `重新匹配完成！\n共处理 ${result.count} 只猫咪。`
+        );
+
+        // 重新加载猫咪列表
+        alert(
+    `重新匹配完成！\n共处理 ${result.count} 只猫咪。`
+);
+
+    }
+    catch (error) {
+
+        console.error(
+            "重新匹配失败：",
+            error
+        );
+
+        alert(
+            "重新匹配失败，请检查后台服务器。"
+        );
+
+    }
+
+}
+
+
+// ==================================================
+// 一、读取已有猫咪
+// ==================================================
+
+fetch("/api/cats")
+
+.then(
+response => response.json()
+)
+
+.then(
+data => {
+
+
+    let box =
+        document.getElementById("catList");
+
+
+    box.innerHTML = "";
+
+
+    data.forEach(
+        cat => {
+
+
+            box.innerHTML +=
+
+            `
+
+            <div class="cat-item">
+
+                <p>
+
+                🐱
+
+                <b>
+                ${cat["名字"]}
+                </b>
+
+
+                <br>
+
+                区域：
+                ${cat["活动区域"]}
+
+
+                <br>
+
+                性格：
+                ${cat["性格"]}
+
+
+                </p>
+
+
+                <button
+                    onclick="editCat(${cat["id"]})"
+                >
+
+                    编辑
+
+                </button>
+
+
+                <button
+                    onclick="deleteCat(${cat["id"]})"
+                >
+
+                    删除
+
+                </button>
+
+
+            </div>
+
+            `;
+
+        }
+
+    );
+
+}
+
+);
+
+
+// ==================================================
+// 二、添加猫咪
+// ==================================================
+
+async function addCat(){
+
+
+    let filename = "";
+
+
+    let file =
+        document
+        .getElementById("photoFile")
+        .files[0];
+
+
+    if(file){
+
+
+        let formData =
+            new FormData();
+
+
+        formData.append(
+            "file",
+            file
+        );
+
+
+        let upload =
+            await fetch(
+                "/api/upload",
+                {
+                    method:"POST",
+                    body:formData
+                }
+            );
+
+
+        let result =
+            await upload.json();
+
+
+        filename =
+            result.filename;
+
+    }
+
+
+    let cat = {
+
+
+        "名字":
+        document
+        .getElementById("name")
+        .value,
+
+
+        "活动区域":
+        document
+        .getElementById("area")
+        .value,
+
+
+        "照片":
+        filename,
+
+
+        "毛色":
+        document
+        .getElementById("color")
+        .value,
+
+
+        "体型":
+        document
+        .getElementById("size")
+        .value,
+
+
+        "性格":
+        document
+        .getElementById("personality")
+        .value,
+
+
+        "常见行为":
+        document
+        .getElementById("behavior")
+        .value,
+
+
+        "发现地点":
+        document
+        .getElementById("place")
+        .value,
+
+
+        "备注":
+        document
+        .getElementById("note")
+        .value
+
+    };
+
+
+    fetch(
+        "/api/add_cat",
+        {
+
+            method:"POST",
+
+            headers:
+            {
+                "Content-Type":
+                "application/json"
+            },
+
+            body:
+            JSON.stringify(cat)
+
+        }
+
+    )
+
+
+    .then(
+        response =>
+        response.json()
+    )
+
+
+    .then(
+        data => {
+
+
+            alert(
+                "添加成功，编号："+data.id
+            );
+
+
+            location.reload();
+
+        }
+
+    );
+
+}
+
+
+// ==================================================
+// 三、删除猫咪
+// ==================================================
+
+function deleteCat(id){
+
+
+    if(
+        !confirm(
+            "确定删除这只猫吗？"
+        )
+    ){
+
+        return;
+
+    }
+
+
+    fetch(
+        "/api/delete_cat/"+id,
+        {
+
+            method:"DELETE"
+
+        }
+
+    )
+
+
+    .then(
+        res =>
+        res.json()
+    )
+
+
+    .then(
+        data => {
+
+
+            alert(
+                "删除成功"
+            );
+
+
+            location.reload();
+
+        }
+
+    );
+
+}
+
+
+// ==================================================
+// 四、编辑猫咪
+// ==================================================
+
+function editCat(id){
+
+
+    fetch("/api/cats")
+
+    .then(
+        res =>
+        res.json()
+    )
+
+    .then(
+        cats => {
+
+
+            let cat =
+                cats.find(
+                    item =>
+                    item["id"] === id
+                );
+
+
+            if(!cat){
+
+                alert(
+                    "没有找到这只猫咪"
+                );
+
+                return;
+
+            }
+
+
+            let name =
+                prompt(
+                    "请输入新的名字",
+                    cat["名字"] || ""
+                );
+
+
+            if(name === null){
+                return;
+            }
+
+
+            let area =
+                prompt(
+                    "请输入新的活动区域",
+                    cat["活动区域"] || ""
+                );
+
+
+            if(area === null){
+                return;
+            }
+
+
+            let personality =
+                prompt(
+                    "请输入新的性格",
+                    cat["性格"] || ""
+                );
+
+
+            if(personality === null){
+                return;
+            }
+
+
+            let behavior =
+                prompt(
+                    "请输入常见行为",
+                    cat["常见行为"] || ""
+                );
+
+
+            if(behavior === null){
+                return;
+            }
+
+
+            let color =
+                prompt(
+                    "请输入毛色",
+                    cat["毛色"] || ""
+                );
+
+
+            if(color === null){
+                return;
+            }
+
+
+            let size =
+                prompt(
+                    "请输入体型",
+                    cat["体型"] || ""
+                );
+
+
+            if(size === null){
+                return;
+            }
+
+
+            let place =
+                prompt(
+                    "请输入发现地点",
+                    cat["发现地点"] || ""
+                );
+
+
+            if(place === null){
+                return;
+            }
+
+
+            let note =
+                prompt(
+                    "请输入备注",
+                    cat["备注"] || ""
+                );
+
+
+            if(note === null){
+                return;
+            }
+
+
+            let data = {
+
+
+                "名字":
+                name,
+
+
+                "活动区域":
+                area,
+
+
+                "性格":
+                personality,
+
+
+                "常见行为":
+                behavior,
+
+
+                "毛色":
+                color,
+
+
+                "体型":
+                size,
+
+
+                "发现地点":
+                place,
+
+
+                "备注":
+                note
+
+            };
+
+
+            fetch(
+                "/api/update_cat/" + id,
+                {
+
+                    method: "PUT",
+
+                    headers: {
+
+                        "Content-Type":
+                        "application/json"
+
+                    },
+
+                    body:
+                    JSON.stringify(data)
+
+                }
+            )
+
+
+            .then(
+                res =>
+                res.json()
+            )
+
+
+            .then(
+                result => {
+
+
+                if(
+                    result.status === "success"
+                ){
+
+                    alert(
+                        "修改成功！《猫苑》关联也已重新匹配。"
+                    );
+
+
+                    location.reload();
+
+                }
+
+                else{
+
+                    alert(
+                        "修改失败，请检查 Flask。"
+                    );
+
+                }
+
+            })
+
+
+            .catch(
+                error => {
+
+
+                    console.error(
+                        "修改失败：",
+                        error
+                    );
+
+
+                    alert(
+                        "修改失败，请打开 F12 查看错误。"
+                    );
+
+                }
+
+            );
+
+        }
+
+    );
+
+}
+
+
+// ==================================================
+// 五、地图区域管理
+// ==================================================
+
+let mapAreas = {};
+
+let selectedMapArea = "";
+
+let selectedX = null;
+
+let selectedY = null;
+
+
+// -----------------------------------------------
+// 读取猫咪活动区域
+// -----------------------------------------------
+
+async function loadMapAreas(){
+
+    try{
+
+        // ==========================================
+        // 1. 读取地图地点
+        // ==========================================
+
+        let response =
+            await fetch("/api/map_areas");
+
+        if(!response.ok){
+
+            throw new Error(
+                "地图地点读取失败"
+            );
+
+        }
+
+        mapAreas =
+            await response.json();
+
+
+        // ==========================================
+        // 2. 生成“地图区域管理”的下拉菜单
+        // ==========================================
+
+        let mapSelect =
+            document.getElementById(
+                "mapAreaSelect"
+            );
+
+
+        mapSelect.innerHTML = `
+            <option value="">
+                —— 请选择活动区域 ——
+            </option>
+        `;
+
+
+        Object.keys(mapAreas).forEach(
+    areaName => {
+
+        let item =
+            mapAreas[areaName];
+
+        if (!item) {
+            return;
+        }
+
+        let standardPlace =
+    item["地图标准地点"] || "";
+
+// 如果“区域名称”和“地图标准地点”完全相同，
+// 说明这是标准地点自己的记录，不是活动区域。
+// 所有这种记录都不显示，而不是只排除“学生公寓7幢”。
+if (
+    standardPlace &&
+    areaName === standardPlace
+) {
+    return;
+}
+
+        let option =
+            document.createElement(
+                "option"
+            );
+
+        option.value =
+            areaName;
+
+        if (standardPlace) {
+
+            option.textContent =
+                `${areaName}（${standardPlace}）`;
+
+        } else {
+
+            option.textContent =
+                areaName;
+
+        }
+
+        mapSelect.appendChild(
+            option
+        );
+
+    }
+);
+
+
+        // ==========================================
+        // 3. 生成“新增猫咪”的活动区域下拉菜单
+        // ==========================================
+
+       let catAreaSelect =
+    document.getElementById(
+        "area"
+    );
+
+
+if(catAreaSelect){
+
+    catAreaSelect.innerHTML = `
+
+        <option value="">
+            —— 请先选择活动区域 ——
+        </option>
+
+    `;
+
+
+    Object.keys(mapAreas).forEach(
+        areaName => {
+
+            let item =
+                mapAreas[areaName];
+
+
+            if(!item){
+                return;
+            }
+
+
+            /*
+             * 如果这个键本身就是地图标准地点，
+             * 就不要把它作为新的活动区域显示。
+             *
+             * 例如：
+             *
+             * 宿舍7栋
+             *      ↓
+             * 学生公寓7幢
+             *
+             * 只显示“宿舍7栋（学生公寓7幢）”
+             */
+
+            let standardPlace =
+                item["地图标准地点"];
+
+
+            if(
+                areaName === standardPlace
+            ){
+                return;
+            }
+
+
+            let option =
+                document.createElement(
+                    "option"
+                );
+
+
+            /*
+             * 实际保存到猫咪数据库中的
+             * 是活动区域名称
+             */
+
+            option.value =
+                areaName;
+
+
+            /*
+             * 管理员看到的名称
+             */
+
+            if(standardPlace){
+
+                option.textContent =
+                    `${areaName}（${standardPlace}）`;
+
+            }else{
+
+                option.textContent =
+                    areaName;
+
+            }
+
+
+            catAreaSelect.appendChild(
+                option
+            );
+
+        }
+    );
+
+}
+
+
+        // ==========================================
+        // 4. 地图管理区域选择事件
+        // ==========================================
+
+        mapSelect.onchange =
+            function(){
+
+                selectedMapArea =
+                    this.value;
+
+
+                let placeInput =
+                    document.getElementById(
+                        "mapPlaceName"
+                    );
+
+
+                if(!selectedMapArea){
+
+                    placeInput.value = "";
+
+                    return;
+
+                }
+
+
+                /*
+                 * 从地图数据中读取正式地点名称
+                 */
+
+                let currentMap =
+                    mapAreas[
+                        selectedMapArea
+                    ];
+
+
+                if(
+                    currentMap &&
+                    currentMap["地图标准地点"]
+                ){
+
+                    placeInput.value =
+                        currentMap[
+                            "地图标准地点"
+                        ];
+
+                }
+
+                else{
+
+                    placeInput.value =
+                        selectedMapArea;
+
+                }
+
+
+                // ==================================
+                // 如果已经保存过坐标
+                // ==================================
+
+                if(currentMap){
+
+                    selectedX =
+                        currentMap.x;
+
+                    selectedY =
+                        currentMap.y;
+
+
+                    showMapMarker(
+                        selectedX,
+                        selectedY
+                    );
+
+
+                    showMapInfo(
+                        selectedMapArea,
+                        selectedX,
+                        selectedY
+                    );
+
+                }
+
+                else{
+
+                    selectedX = null;
+
+                    selectedY = null;
+
+
+                    document
+                    .getElementById(
+                        "mapAdminMarker"
+                    )
+                    .style.display =
+                    "none";
+
+
+                    document
+                    .getElementById(
+                        "mapAdminInfo"
+                    )
+                    .innerHTML = `
+
+                        当前区域：
+
+                        <b>
+                            ${selectedMapArea}
+                        </b>
+
+                        <br>
+
+                        还没有设置地图位置。
+
+                        <br>
+
+                        请在地图上点击。
+
+                    `;
+
+                }
+
+            };
+
+
+    }
+
+    catch(error){
+
+        console.error(
+            "地图区域读取失败：",
+            error
+        );
+
+
+        alert(
+            "地图地点读取失败，请检查 Flask。"
+        );
+
+    }
+
+}
+
+// -----------------------------------------------
+// 点击地图
+// -----------------------------------------------
+
+document
+.getElementById("mapAdmin")
+.addEventListener(
+    "click",
+    function(event){
+
+
+        if(
+            !selectedMapArea
+        ){
+
+            alert(
+                "请先选择一个活动区域。"
+            );
+
+            return;
+
+        }
+
+
+        let rect =
+            this.getBoundingClientRect();
+
+
+        let x =
+            (
+                (event.clientX - rect.left)
+                /
+                rect.width
+            )
+            *
+            100;
+
+
+        let y =
+            (
+                (event.clientY - rect.top)
+                /
+                rect.height
+            )
+            *
+            100;
+
+
+        selectedX =
+            x;
+
+
+        selectedY =
+            y;
+
+
+        showMapMarker(
+            x,
+            y
+        );
+
+
+        showMapInfo(
+            selectedMapArea,
+            x,
+            y
+        );
+
+    }
+);
+
+
+// -----------------------------------------------
+// 显示地图标记
+// -----------------------------------------------
+
+function showMapMarker(x, y){
+
+
+    let marker =
+        document
+        .getElementById(
+            "mapAdminMarker"
+        );
+
+
+    marker.style.left =
+        x + "%";
+
+
+    marker.style.top =
+        y + "%";
+
+
+    marker.style.display =
+        "block";
+
+}
+
+
+// -----------------------------------------------
+// 显示坐标信息
+// -----------------------------------------------
+
+function showMapInfo(
+    area,
+    x,
+    y
+){
+
+
+    document
+    .getElementById(
+        "mapAdminInfo"
+    )
+    .innerHTML =
+
+    `
+
+    当前区域：
+
+    <b>
+    ${area}
+    </b>
+
+    <br>
+
+    地图坐标：
+
+    X = ${x.toFixed(2)}%
+
+    ，
+
+    Y = ${y.toFixed(2)}%
+
+    `;
+
+}
+
+// ==================================================
+// 新增地图区域
+// ==================================================
+
+function createMapArea() {
+
+    const input =
+        document.getElementById(
+            "newMapAreaName"
+        );
+
+    const areaName =
+        input.value.trim();
+
+
+    // =========================
+    // 检查名称
+    // =========================
+
+    if (!areaName) {
+
+        alert(
+            "请输入新的活动区域名称。"
+        );
+
+        return;
+
+    }
+
+
+    // =========================
+    // 检查是否已经存在
+    // =========================
+
+    // =========================
+// 检查是否已经存在
+// =========================
+
+if (mapAreas[areaName]) {
+
+    const oldArea =
+        mapAreas[areaName];
+
+    const oldStandardPlace =
+        oldArea["地图标准地点"] || "";
+
+    // 如果这个记录的“区域名称”
+    // 和“地图标准地点”完全相同，
+    // 说明它是之前遗留下来的
+    // “标准地点自身记录”。
+    //
+    // 例如：
+    // 三组团14栋宿舍
+    //      ↓
+    // 三组团14栋宿舍
+    //
+    // 这种记录可以重新建立为真正的活动区域。
+    if (
+        oldStandardPlace === areaName
+    ) {
+
+        delete mapAreas[areaName];
+
+    }
+    else {
+
+        alert(
+            "这个地图区域已经存在。"
+        );
+
+        return;
+
+    }
+
+}
+
+
+    // =========================
+    // 创建一个新的区域
+    // =========================
+
+    mapAreas[areaName] = {
+
+        x: null,
+
+        y: null,
+
+        地图标准地点: ""
+
+    };
+
+
+    // =========================
+    // 加入下拉菜单
+    // =========================
+
+    const mapSelect =
+        document.getElementById(
+            "mapAreaSelect"
+        );
+
+
+    const option =
+        document.createElement(
+            "option"
+        );
+
+
+    option.value =
+        areaName;
+
+
+    option.textContent =
+        areaName;
+
+
+    mapSelect.appendChild(
+        option
+    );
+
+    // =========================
+// 同时加入“新增猫咪”的活动区域
+// =========================
+
+const catAreaSelect =
+    document.getElementById(
+        "area"
+    );
+
+
+if (catAreaSelect) {
+
+    const catOption =
+        document.createElement(
+            "option"
+        );
+
+    catOption.value =
+        areaName;
+
+    catOption.textContent =
+        areaName;
+
+    catAreaSelect.appendChild(
+        catOption
+    );
+
+}
+
+
+    // =========================
+    // 自动选择刚刚创建的区域
+    // =========================
+
+    mapSelect.value =
+        areaName;
+
+
+    selectedMapArea =
+        areaName;
+
+
+    selectedX =
+        null;
+
+
+    selectedY =
+        null;
+
+
+    // =========================
+    // 清空正式地点
+    // =========================
+
+    document
+    .getElementById(
+        "mapPlaceName"
+    )
+    .value = "";
+
+
+    // =========================
+    // 隐藏旧地图标记
+    // =========================
+
+    document
+    .getElementById(
+        "mapAdminMarker"
+    )
+    .style.display =
+    "none";
+
+
+    // =========================
+    // 更新提示
+    // =========================
+
+    document
+    .getElementById(
+        "mapAdminInfo"
+    )
+    .innerHTML = `
+
+        当前区域：
+
+        <b>
+            ${areaName}
+        </b>
+
+        <br>
+
+        这是一个新的地图区域。
+
+        <br>
+
+        请在下面的校园地图上点击准确位置。
+
+    `;
+
+
+    // =========================
+    // 清空输入框
+    // =========================
+
+    input.value = "";
+
+}
+
+// -----------------------------------------------
+// 保存地图位置
+// -----------------------------------------------
+
+async function saveMapArea(){
+
+
+    // =========================
+    // 检查是否选择区域
+    // =========================
+
+    if(
+        !selectedMapArea
+    ){
+
+        alert(
+            "请先选择活动区域。"
+        );
+
+        return;
+
+    }
+
+
+    // =========================
+    // 检查是否点击地图
+    // =========================
+
+    if(
+        selectedX === null ||
+        selectedY === null
+    ){
+
+        alert(
+            "请先在地图上点击一个位置。"
+        );
+
+        return;
+
+    }
+
+
+    // =========================
+    // 更新当前区域坐标
+    // =========================
+
+    let mapPlaceName =
+    document
+    .getElementById(
+        "mapPlaceName"
+    )
+    .value
+    .trim();
+
+
+if(
+    !mapPlaceName
+){
+
+    alert(
+        "请填写地图标准地点名称。"
+    );
+
+    return;
+
+}
+
+
+mapAreas[
+    selectedMapArea
+] = {
+
+    x:
+    Number(
+        selectedX.toFixed(2)
+    ),
+
+    y:
+    Number(
+        selectedY.toFixed(2)
+    ),
+
+    地图标准地点:
+    mapPlaceName
+
+};
+
+
+    // =========================
+    // 真正发送给 Flask
+    // =========================
+
+    try{
+
+
+        let response =
+            await fetch(
+                "/api/map_areas",
+                {
+
+                    method: "POST",
+
+                    headers: {
+
+                        "Content-Type":
+                        "application/json"
+
+                    },
+
+                    body:
+                    JSON.stringify(
+                        mapAreas
+                    )
+
+                }
+            );
+
+
+        let result =
+            await response.json();
+
+
+        // =========================
+        // 判断保存结果
+        // =========================
+
+        if(
+            result.status === "success"
+        ){
+
+            alert(
+                "地图位置保存成功！"
+            );
+
+        }
+
+        else{
+
+            alert(
+                "地图位置保存失败！"
+            );
+
+        }
+
+
+    }
+
+    catch(error){
+
+
+        console.error(
+            "地图位置保存失败：",
+            error
+        );
+
+
+        alert(
+            "地图位置保存失败，请检查 Flask。"
+        );
+
+    }
+
+}
+
+
+// ==================================================
+// 页面加载完成
+// ==================================================
+
+loadMapAreas();
+
+</script>
+
+
+</body>
+
+</html>

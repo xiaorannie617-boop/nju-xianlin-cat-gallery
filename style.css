@@ -1,0 +1,1280 @@
+/* =========================================================
+   南大猫苑 · 校园猫咪图鉴
+   网站主视觉
+   ========================================================= */
+
+
+/* =========================================================
+   全局
+   ========================================================= */
+
+* {
+    box-sizing: border-box;
+}
+
+
+html {
+    scroll-behavior: smooth;
+}
+
+
+body {
+
+    margin: 0;
+
+    font-family:
+        "Microsoft YaHei",
+        "PingFang SC",
+        "Noto Sans SC",
+        sans-serif;
+
+    background:
+        linear-gradient(
+            180deg,
+            #f7f3eb 0%,
+            #faf8f3 45%,
+            #f2eee5 100%
+        );
+
+    color: #292722;
+
+    line-height: 1.8;
+}
+
+
+/* =========================================================
+   主容器
+   ========================================================= */
+
+.container {
+
+    width: 92%;
+
+    max-width: 1200px;
+
+    margin: 0 auto;
+
+    padding: 45px 0 80px;
+}
+
+
+/* =========================================================
+   网站标题
+   ========================================================= */
+
+h1 {
+
+    margin: 10px 0 0;
+
+    text-align: center;
+
+    font-family:
+        "STKaiti",
+        "KaiTi",
+        "Microsoft YaHei",
+        sans-serif;
+
+    font-size: 46px;
+
+    font-weight: 600;
+
+    letter-spacing: 8px;
+
+    color: #302c27;
+}
+
+
+.subtitle {
+
+    margin-top: 5px;
+
+    text-align: center;
+
+    color: #877e72;
+
+    font-size: 16px;
+
+    letter-spacing: 3px;
+}
+
+
+/* =========================================================
+   顶部装饰线
+   ========================================================= */
+
+.subtitle::after {
+
+    content: "";
+
+    display: block;
+
+    width: 70px;
+
+    height: 2px;
+
+    margin: 18px auto 0;
+
+    background: #a58b67;
+}
+
+
+/* =========================================================
+   猫咪数量
+   ========================================================= */
+
+.stat {
+
+    margin: 35px auto 25px;
+
+    text-align: center;
+
+    color: #71685d;
+
+    font-size: 17px;
+}
+
+
+.stat span {
+
+    display: inline-block;
+
+    margin: 0 5px;
+
+    font-size: 30px;
+
+    font-weight: bold;
+
+    color: #8c6845;
+}
+
+
+/* =========================================================
+   搜索区域
+   ========================================================= */
+
+.search-box {
+
+    display: flex;
+
+    justify-content: center;
+
+    align-items: center;
+
+    gap: 10px;
+
+    margin: 30px auto 45px;
+
+    max-width: 650px;
+}
+
+
+.search-box input {
+
+    flex: 1;
+
+    min-width: 0;
+
+    padding: 14px 20px;
+
+    border: 1px solid #d8d0c4;
+
+    border-radius: 30px;
+
+    outline: none;
+
+    background: rgba(255,255,255,0.8);
+
+    color: #333;
+
+    font-size: 16px;
+
+    transition: 0.25s;
+}
+
+
+.search-box input:focus {
+
+    border-color: #9d8060;
+
+    box-shadow:
+        0 0 0 4px rgba(157,128,96,0.12);
+}
+
+
+button {
+
+    padding: 13px 25px;
+
+    border: none;
+
+    border-radius: 30px;
+
+    background: #665441;
+
+    color: white;
+
+    font-size: 15px;
+
+    cursor: pointer;
+
+    transition:
+        transform 0.2s,
+        background 0.2s,
+        box-shadow 0.2s;
+}
+
+
+button:hover {
+
+    background: #4e4032;
+
+    transform: translateY(-2px);
+
+    box-shadow:
+        0 7px 18px rgba(60,45,30,0.18);
+}
+
+
+/* =========================================================
+   猫咪卡片区域
+   ========================================================= */
+
+.cat-list {
+
+    display: grid;
+
+    grid-template-columns:
+        repeat(
+            auto-fit,
+            minmax(250px, 1fr)
+        );
+
+    gap: 28px;
+}
+
+
+/* =========================================================
+   单只猫咪卡片
+   ========================================================= */
+
+.cat-card {
+
+    position: relative;
+
+    overflow: hidden;
+
+    background:
+        rgba(255,255,255,0.88);
+
+    border:
+        1px solid rgba(160,145,125,0.18);
+
+    border-radius: 20px;
+
+    padding: 15px;
+
+    box-shadow:
+        0 8px 30px rgba(70,55,40,0.08);
+
+    cursor: pointer;
+
+    transition:
+        transform 0.3s ease,
+        box-shadow 0.3s ease;
+}
+
+
+.cat-card::before {
+
+    content: "";
+
+    position: absolute;
+
+    top: 0;
+    left: 0;
+
+    width: 100%;
+
+    height: 4px;
+
+    background:
+        linear-gradient(
+            90deg,
+            #a58b67,
+            #d2b894,
+            #a58b67
+        );
+}
+
+
+.cat-card:hover {
+
+    transform:
+        translateY(-8px);
+
+    box-shadow:
+        0 18px 40px rgba(65,50,35,0.16);
+}
+
+
+/* =========================================================
+   猫咪照片
+   ========================================================= */
+
+.cat-card img {
+
+    display: block;
+
+    width: 100%;
+
+    height: 250px;
+
+    object-fit: cover;
+
+    border-radius: 15px;
+
+    background: #eee8de;
+
+    transition:
+        transform 0.4s ease;
+}
+
+
+.cat-card:hover img {
+
+    transform: scale(1.03);
+}
+
+
+/* =========================================================
+   猫咪名字
+   ========================================================= */
+
+.cat-card h3 {
+
+    margin:
+        17px 0 8px;
+
+    text-align: center;
+
+    font-size: 23px;
+
+    font-weight: 600;
+
+    color: #40372e;
+}
+
+/* =========================================================
+   猫咪卡片标签
+   ========================================================= */
+
+.cat-tags {
+
+    display: flex;
+
+    justify-content: center;
+
+    flex-wrap: wrap;
+
+    gap: 8px;
+
+    margin:
+        0 0 12px;
+}
+
+
+.cat-tag {
+
+    display: inline-block;
+
+    padding:
+        5px 10px;
+
+    border:
+        1px solid #d8c9b7;
+
+    border-radius: 14px;
+
+    background:
+        #f7f2ea;
+
+    color:
+        #6d5d4c;
+
+    font-size:
+        12px;
+
+    line-height:
+        1.4;
+}
+
+
+/* =========================================================
+   猫咪活动区域
+   ========================================================= */
+
+.cat-card-area {
+
+    margin:
+        8px 0;
+
+    padding:
+        8px 12px;
+
+    border-radius:
+        10px;
+
+    background:
+        #f3ede4;
+
+    color:
+        #766655;
+
+    font-size:
+        13px;
+
+    text-align:
+        center;
+}
+
+
+/* =========================================================
+   猫咪常见行为
+   ========================================================= */
+
+.cat-card-behavior {
+
+    margin:
+        12px 2px 0;
+
+    padding:
+        10px 12px;
+
+    border-left:
+        3px solid #c4a77d;
+
+    background:
+        rgba(247, 242, 234, 0.65);
+
+    color:
+        #625548;
+
+    font-size:
+        13px;
+
+    line-height:
+        1.7;
+
+    text-align:
+        left;
+}
+
+
+/* =========================================================
+   查看完整档案
+   ========================================================= */
+
+.cat-card-more {
+
+    margin-top:
+        14px;
+
+    padding-top:
+        10px;
+
+    border-top:
+        1px solid #e5dbcf;
+
+    color:
+        #8a7359;
+
+    font-size:
+        12px;
+
+    text-align:
+        center;
+
+    letter-spacing:
+        1px;
+}
+
+
+/* =========================================================
+   猫咪基本信息
+   ========================================================= */
+
+.info {
+
+    padding:
+        4px 8px 10px;
+
+    color: #6e665d;
+
+    font-size: 14px;
+}
+
+
+.info p {
+
+    margin:
+        5px 0;
+}
+
+
+/* =========================================================
+   搜索结果
+   ========================================================= */
+
+#result {
+
+    margin-top: 45px;
+}
+
+
+/* =========================================================
+   记录卡片
+   ========================================================= */
+
+.record {
+
+    margin-top: 20px;
+
+    padding: 25px;
+
+    background:
+        rgba(255,255,255,0.9);
+
+    border:
+        1px solid rgba(160,145,125,0.16);
+
+    border-radius: 18px;
+
+    box-shadow:
+        0 8px 30px rgba(70,55,40,0.07);
+}
+
+
+.record h2 {
+
+    margin-top: 0;
+
+    color: #4a3e31;
+
+    font-family:
+        "STKaiti",
+        "KaiTi",
+        "Microsoft YaHei",
+        sans-serif;
+
+    letter-spacing: 2px;
+}
+
+
+.record p {
+
+    margin:
+        8px 0;
+
+    color: #5f584f;
+}
+
+
+.record b {
+
+    color: #413a33;
+}
+
+
+/* =========================================================
+   猫咪详情照片
+   ========================================================= */
+
+.record > img {
+
+    box-shadow:
+        0 8px 25px rgba(50,40,30,0.12);
+}
+
+
+/* =========================================================
+   《猫苑》区域
+   ========================================================= */
+
+.maoyuan-record {
+
+    position: relative;
+
+    margin-top: 18px;
+
+    padding:
+        22px 25px;
+
+    background:
+        linear-gradient(
+            135deg,
+            #fffdf8,
+            #f7f0e4
+        );
+
+    border-left:
+        4px solid #a58b67;
+}
+
+
+.maoyuan-record::before {
+
+    content: "📖";
+
+    position: absolute;
+
+    top: 18px;
+
+    right: 22px;
+
+    font-size: 20px;
+
+    opacity: 0.7;
+}
+
+
+/* =========================================================
+   《猫苑》原文
+   ========================================================= */
+
+.maoyuan-text {
+
+    margin-top: 10px;
+
+    padding:
+        18px 20px;
+
+    background:
+        rgba(255,255,255,0.72);
+
+    border-radius: 12px;
+
+    color: #4d463e;
+
+    font-family:
+        "STKaiti",
+        "KaiTi",
+        "FangSong",
+        "Microsoft YaHei",
+        serif;
+
+    font-size: 17px;
+
+    line-height: 2;
+
+    letter-spacing: 1px;
+
+    border:
+        1px solid rgba(150,130,100,0.12);
+}
+
+
+/* =========================================================
+   关键词
+   ========================================================= */
+
+.keyword {
+
+    color: #956b3f;
+
+    font-weight: bold;
+}
+
+
+/* =========================================================
+   分数
+   ========================================================= */
+
+.score {
+
+    color: #8d6843;
+
+    font-weight: bold;
+}
+
+
+/* =========================================================
+   手机端
+   ========================================================= */
+
+@media (max-width: 700px) {
+
+
+    .container {
+
+        width: 94%;
+
+        padding-top: 25px;
+    }
+
+
+    h1 {
+
+        font-size: 34px;
+
+        letter-spacing: 5px;
+    }
+
+
+    .subtitle {
+
+        font-size: 14px;
+
+        letter-spacing: 2px;
+    }
+
+
+    .search-box {
+
+        flex-direction: column;
+
+        width: 100%;
+    }
+
+
+    .search-box input {
+
+        width: 100%;
+    }
+
+
+    button {
+
+        width: 100%;
+    }
+
+
+    .cat-list {
+
+        grid-template-columns:
+            1fr;
+
+        gap: 20px;
+    }
+
+
+    .cat-card img {
+
+        height: 260px;
+    }
+
+
+    .record {
+
+        padding: 18px;
+    }
+
+
+    .maoyuan-text {
+
+        font-size: 16px;
+
+        padding: 15px;
+
+        line-height: 1.9;
+    }
+
+}
+/* =========================================================
+   活动区域筛选
+   ========================================================= */
+
+.area-filter {
+
+    margin: 10px auto 40px;
+
+    text-align: center;
+
+}
+
+
+.area-title {
+
+    margin-bottom: 16px;
+
+    color: #766c60;
+
+    font-size: 16px;
+
+    letter-spacing: 2px;
+
+}
+
+
+.area-buttons {
+
+    display: flex;
+
+    justify-content: center;
+
+    flex-wrap: wrap;
+
+    gap: 10px;
+
+}
+
+
+.area-button {
+
+    width: auto;
+
+    padding: 8px 18px;
+
+    border: 1px solid #d2c4b1;
+
+    border-radius: 20px;
+
+    background: rgba(255,255,255,0.75);
+
+    color: #66594b;
+
+    font-size: 14px;
+
+    cursor: pointer;
+
+    box-shadow: none;
+
+    transition:
+        all 0.2s ease;
+}
+
+
+.area-button:hover {
+
+    background: #eee5d8;
+
+    color: #4e4032;
+
+    transform: translateY(-1px);
+
+    box-shadow: none;
+
+}
+
+
+.area-button.active {
+
+    background: #665441;
+
+    border-color: #665441;
+
+    color: white;
+
+}
+
+/* 猫咪标签 */
+
+.cat-tags {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 20px 0 25px;
+}
+
+.cat-tag {
+    display: inline-block;
+    padding: 7px 16px;
+    border: 1px solid #d2c4b1;
+    border-radius: 20px;
+    background: #f7f1e8;
+    color: #665441;
+    font-size: 14px;
+    letter-spacing: 1px;
+    box-shadow: 0 2px 6px rgba(90, 70, 50, 0.08);
+}
+
+/* 校园地图 */
+
+.campus-map-section {
+    width: 100%;
+    max-width: 1100px;
+    margin: 30px auto 50px;
+    text-align: center;
+}
+
+.campus-map-wrapper {
+    position: relative;
+
+    width: 100%;
+
+    overflow: visible;
+
+    border-radius: 16px;
+
+    background: #f5f0e8;
+
+    padding: 12px;
+
+    box-sizing: border-box;
+
+    box-shadow:
+        0 8px 24px
+        rgba(80, 60, 40, 0.12);
+}
+
+.campus-map {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 10px;
+}
+
+/* =========================
+   校园地图猫咪标记
+   ========================= */
+
+
+.map-markers {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+/* =========================
+   校园地图猫咪标记
+========================= */
+
+.map-cat-marker {
+    position: absolute;
+
+    transform: translate(-50%, -100%);
+
+    min-width: 54px;
+
+    padding: 6px 10px;
+
+    border: 1px solid #b8a58d;
+    border-radius: 18px;
+
+    background: rgba(255, 250, 242, 0.96);
+
+    color: #4e4032;
+
+    font-size: 13px;
+    font-weight: bold;
+
+    box-shadow:
+        0 4px 12px
+        rgba(60, 40, 20, 0.20);
+
+    cursor: pointer;
+
+    pointer-events: auto;
+
+    white-space: nowrap;
+
+    text-align: center;
+
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+/* =========================
+   地图猫咪悬停信息卡
+========================= */
+
+.map-cat-info {
+    display: none;
+
+    position: absolute;
+
+    left: 50%;
+    bottom: calc(100% + 10px);
+
+    transform: translateX(-50%);
+
+    min-width: 180px;
+
+    padding: 14px 16px;
+
+    border: 1px solid #cdbda8;
+    border-radius: 12px;
+
+    background: rgba(255, 250, 242, 0.98);
+
+    color: #5b4d3e;
+
+    font-size: 13px;
+    font-weight: normal;
+
+    line-height: 1.8;
+
+    text-align: left;
+
+    white-space: normal;
+
+    box-shadow:
+        0 8px 24px
+        rgba(70, 50, 30, 0.20);
+
+    z-index: 100;
+}
+
+
+/* 鼠标放到猫咪标记上时显示 */
+
+.map-cat-marker:hover .map-cat-info,
+.map-cat-marker.map-cat-hover .map-cat-info {
+
+    display: block;
+}
+
+
+/* 信息卡底部小三角 */
+
+.map-cat-info::after {
+
+    content: "";
+
+    position: absolute;
+
+    left: 50%;
+    bottom: -7px;
+
+    width: 12px;
+    height: 12px;
+
+    background: rgba(255, 250, 242, 0.98);
+
+    border-right: 1px solid #cdbda8;
+    border-bottom: 1px solid #cdbda8;
+
+    transform:
+        translateX(-50%)
+        rotate(45deg);
+}
+
+
+/* “点击查看档案”提示 */
+
+.map-cat-hint {
+
+    margin-top: 8px;
+    padding-top: 7px;
+
+    border-top: 1px solid #e3d8ca;
+
+    color: #8a7660;
+
+    font-size: 12px;
+
+    text-align: center;
+}
+
+
+/* 猫咪图标 */
+
+.map-cat-icon {
+    font-size: 22px;
+    line-height: 22px;
+}
+
+
+/* 猫咪名字 */
+
+.map-cat-name {
+    margin-top: 2px;
+
+    font-size: 12px;
+
+    letter-spacing: 1px;
+}
+
+
+/* 鼠标悬停 */
+
+.map-cat-marker:hover,
+.map-cat-marker.map-cat-hover {
+
+    transform:
+        translate(-50%, -100%)
+        scale(1.08);
+
+    box-shadow:
+        0 7px 18px
+        rgba(60, 40, 20, 0.28);
+}
+
+/* ============================================================
+   地图标准地点标签
+   ============================================================ */
+
+.map-standard-place {
+    position: absolute;
+
+    transform:
+        translate(-50%, -50%);
+
+    z-index: 5;
+
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    padding: 5px 10px 5px 7px;
+
+    background: rgba(255, 255, 255, 0.92);
+
+    border: 1px solid
+        rgba(120, 95, 65, 0.22);
+
+    border-radius: 999px;
+
+    box-shadow:
+        0 3px 10px
+        rgba(70, 50, 30, 0.18);
+
+    backdrop-filter: blur(4px);
+
+    pointer-events: none;
+
+    white-space: nowrap;
+
+    font-size: 12px;
+
+    color: #5b4634;
+
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+/* ============================================================
+   地图标准地点中心定位效果
+   ============================================================ */
+
+.map-standard-place::before {
+    content: "";
+
+    position: absolute;
+
+    left: 50%;
+    top: 50%;
+
+    width: 42px;
+    height: 42px;
+
+    transform: translate(-50%, -50%);
+
+    border-radius: 50%;
+
+    border: 1px solid
+        rgba(150, 115, 75, 0.22);
+
+    box-shadow:
+        0 0 0 7px
+        rgba(150, 115, 75, 0.06);
+
+    z-index: -1;
+}
+
+.map-standard-place::after {
+    content: "";
+
+    position: absolute;
+
+    left: 50%;
+    top: 50%;
+
+    width: 6px;
+    height: 6px;
+
+    transform: translate(-50%, -50%);
+
+    border-radius: 50%;
+
+    background: rgba(150, 115, 75, 0.28);
+
+    box-shadow:
+        0 0 0 4px
+        rgba(150, 115, 75, 0.08);
+
+    animation:
+        mapPlacePulse 2.8s
+        ease-out
+        infinite;
+}
+
+
+@keyframes mapPlacePulse {
+
+    0% {
+        opacity: 0.25;
+        transform:
+            translate(-50%, -50%)
+            scale(0.8);
+    }
+
+    50% {
+        opacity: 0.55;
+    }
+
+    100% {
+        opacity: 0;
+        transform:
+            translate(-50%, -50%)
+            scale(1.5);
+    }
+
+}
+
+
+/* 地点图标 */
+
+.map-standard-dot {
+    width: 22px;
+    height: 22px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 50%;
+
+    background: #f3e4d0;
+
+    font-size: 13px;
+
+    box-shadow:
+        inset 0 0 0 1px
+        rgba(120, 90, 60, 0.12);
+}
+
+
+/* 地点名称 */
+
+.map-standard-name {
+    font-weight: 600;
+
+    letter-spacing: 0.3px;
+
+    line-height: 1.2;
+}
+
+/* ============================================================
+   首页地图 / 猫咪图鉴视图切换
+   ============================================================ */
+
+.map-view-hidden {
+    display: none !important;
+}
+
+/* ============================================================
+   猫咪图鉴 / 地图切换按钮居中
+   ============================================================ */
+
+.view-switch {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+
+    width: 100%;
+    margin: 24px auto;
+}
