@@ -20,7 +20,7 @@ else:
     print("本地模型不存在，使用在线模型：BAAI/bge-small-zh-v1.5")
     MODEL_PATH = "BAAI/bge-small-zh-v1.5"
 
-model = SentenceTransformer(MODEL_PATH)
+model = None
 
 
 # ============================================================
@@ -74,19 +74,33 @@ print("《猫苑》拆句后：", len(sentences))
 # 3.5 预先计算《猫苑》所有句子的语义向量
 # ============================================================
 
-print("正在预计算《猫苑》句子向量……")
+model = None
+maoyuan_vectors = None
 
-maoyuan_texts = [
-    item["原文"]
-    for item in sentences
-]
 
-maoyuan_vectors = model.encode(
-    maoyuan_texts,
-    normalize_embeddings=True
-)
+def initialize_model():
+    global model
+    global maoyuan_vectors
 
-print("《猫苑》句子向量预计算完成！")
+    if model is not None:
+        return
+
+    print("正在加载《猫苑》匹配模型……")
+    model = SentenceTransformer(MODEL_PATH)
+
+    print("正在预计算《猫苑》句子向量……")
+
+    maoyuan_texts = [
+        item["原文"]
+        for item in sentences
+    ]
+
+    maoyuan_vectors = model.encode(
+        maoyuan_texts,
+        normalize_embeddings=True
+    )
+
+    print("《猫苑》句子向量预计算完成！")
 
 
 # ============================================================
@@ -890,11 +904,14 @@ def context_penalty(text):
 # 9. 单个特征召回候选
 # ============================================================
 
-def get_candidates(
-    feature,
-    feature_type,
-    candidate_n=20
-):
+def get_candidates(feature,feature_type,candidate_n=20):
+    initialize_model()
+
+    feature_vector = model.encode(
+        [feature],
+        normalize_embeddings=True
+    )
+
 
     # --------------------------------------------------------
     # 现代特征向量
@@ -1196,16 +1213,14 @@ def match_all_features(
         feature = item["特征"]
 
         candidates = get_candidates(
-
             feature,
-
             feature_type,
-
             candidate_n=20
-
         )
 
         for candidate in candidates:
+
+         for candidate in candidates:
 
             candidate["特征序号"] = \
                 feature_index + 1
