@@ -1,8 +1,8 @@
-import pandas as pd
 import re
+import numpy as np
+from openpyxl import load_workbook
 
 from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
 
 
 # ============================================================
@@ -27,9 +27,18 @@ model = SentenceTransformer(MODEL_PATH)
 # 2. 读取新版《猫苑》
 # ============================================================
 
-df = pd.read_excel("Maoyuan_new_database.xlsx")
+wb = load_workbook("Maoyuan_new_database.xlsx", read_only=True, data_only=True)
+ws = wb.active
 
-print("《猫苑》原始记录：", len(df))
+headers = [cell.value for cell in ws[1]]
+
+rows = []
+for row in ws.iter_rows(min_row=2, values_only=True):
+    rows.append(dict(zip(headers, row)))
+
+wb.close()
+
+print("《猫苑》原始记录：", len(rows))
 
 
 # ============================================================
@@ -38,7 +47,7 @@ print("《猫苑》原始记录：", len(df))
 
 sentences = []
 
-for _, row in df.iterrows():
+for row in rows:
 
     text = str(row["原文"])
 
@@ -913,10 +922,7 @@ def get_candidates(
     # 语义相似度
     # --------------------------------------------------------
 
-    similarities = cosine_similarity(
-        feature_vector,
-        maoyuan_vectors
-    )[0]
+    similarities = np.dot(maoyuan_vectors, feature_vector[0])
 
     candidates = []
 

@@ -1,10 +1,8 @@
 Flask
 gunicorn
 python-docx
-pandas
 openpyxl
 numpy
-scikit-learn
 sentence-transformers==3.4.1
 transformers==4.48.3
 modelscope
