@@ -1,11 +1,25 @@
 from flask import Flask, request, jsonify, send_from_directory, session, redirect
 import json
 import os
+from functools import wraps
 from werkzeug.utils import secure_filename
 from cat_match_v2 import match_catyuan
 
 
 app = Flask(__name__)
+
+def login_required(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not session.get("admin_logged_in"):
+            return jsonify({
+                "status": "error",
+                "message": "请先登录管理员账号"
+            }), 401
+
+        return func(*args, **kwargs)
+
+    return wrapper
 
 # =========================
 # 管理员登录配置
@@ -23,7 +37,7 @@ ADMIN_USERNAME = os.environ.get(
 
 ADMIN_PASSWORD = os.environ.get(
     "ADMIN_PASSWORD",
-    "请在本地设置你的密码"
+    "123abc"
 )
 
 
@@ -371,41 +385,41 @@ def delete_cat(cat_id):
 # 修改猫咪信息
 # =========================
 
+
 @app.route(
     "/api/update_cat/<int:cat_id>",
     methods=["PUT"]
 )
+@login_required
 def update_cat(cat_id):
-
-    data = request.json
+    data = request.get_json(silent=True)
 
     if data is None:
         return jsonify({
             "status": "error",
-            "message": "没有收到猫咪数据"
+            "message": "没有收到有效的猫咪数据"
         }), 400
 
     # 读取猫咪数据库
-    with open(
-        DATA_FILE,
-        "r",
-        encoding="utf-8"
-    ) as f:
-
-        cats = json.load(f)
+    try:
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            cats = json.load(f)
+    except Exception as e:
+        print(f"读取猫咪数据库失败：{e}")
+        return jsonify({
+            "status": "error",
+            "message": "读取猫咪数据库失败"
+        }), 500
 
     # 查找猫咪
     target_cat = None
 
     for cat in cats:
-
         if cat["id"] == cat_id:
-
             target_cat = cat
             break
 
     if target_cat is None:
-
         return jsonify({
             "status": "error",
             "message": "没有找到这只猫咪"
@@ -424,44 +438,64 @@ def update_cat(cat_id):
     ]
 
     for field in fields:
-
         if field in data:
-
             target_cat[field] = data[field]
 
-    # 重新匹配《猫苑》
+    # 先保存基本资料，避免匹配失败导致修改丢失
+    try:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(
+                cats,
+                f,
+                ensure_ascii=False,
+                indent=4
+            )
+    except Exception as e:
+        print(f"保存猫咪资料失败：{e}")
+        return jsonify({
+            "status": "error",
+            "message": "保存猫咪资料失败"
+        }), 500
+
     print(
-        f"🐱 正在重新匹配猫咪："
+        f"🐱 基本资料已保存："
         f"{target_cat.get('名字', '未命名')}"
     )
 
-    target_cat["猫苑评价"] = match_catyuan(
-        target_cat
-    )
-
-    # 保存数据库
-    with open(
-        DATA_FILE,
-        "w",
-        encoding="utf-8"
-    ) as f:
-
-        json.dump(
-            cats,
-            f,
-            ensure_ascii=False,
-            indent=4
+    # 再执行《猫苑》匹配
+    try:
+        print(
+            f"🐱 正在重新匹配猫咪："
+            f"{target_cat.get('名字', '未命名')}"
         )
 
-    print(
-        f"🐱 猫咪修改完成："
-        f"{target_cat.get('名字', '未命名')}"
-    )
+        target_cat["猫苑评价"] = match_catyuan(target_cat)
 
-    return jsonify({
-        "status": "success",
-        "id": cat_id
-    })
+        # 保存匹配结果
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(
+                cats,
+                f,
+                ensure_ascii=False,
+                indent=4
+            )
+
+        print("🐱 猫咪资料和《猫苑》匹配均已完成")
+
+        return jsonify({
+            "status": "success",
+            "id": cat_id,
+            "message": "猫咪资料修改成功，匹配已更新"
+        })
+
+    except Exception as e:
+        print(f"《猫苑》重新匹配失败：{type(e).__name__}: {e}")
+
+        return jsonify({
+            "status": "success",
+            "id": cat_id,
+            "message": "猫咪基本资料已保存，但《猫苑》匹配未能更新，请稍后重试"
+        })
 
 # =========================
 # 重新匹配全部猫咪
