@@ -385,11 +385,6 @@ def delete_cat(cat_id):
 # 修改猫咪信息
 # =========================
 
-
-@app.route(
-    "/api/update_cat/<int:cat_id>",
-    methods=["PUT"]
-)
 @login_required
 def update_cat(cat_id):
     data = request.get_json(silent=True)
@@ -441,7 +436,7 @@ def update_cat(cat_id):
         if field in data:
             target_cat[field] = data[field]
 
-    # 先保存基本资料，避免匹配失败导致修改丢失
+    # 保存猫咪资料，不在这里重新加载语义匹配模型
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(
@@ -457,43 +452,13 @@ def update_cat(cat_id):
             "message": "保存猫咪资料失败"
         }), 500
 
-    print(
-        f"🐱 基本资料已保存："
-        f"{target_cat.get('名字', '未命名')}"
-    )
+    print(f"🐱 猫咪资料修改成功：{target_cat.get('名字', '未命名')}")
 
-    # 暂不在保存资料时重新加载语义匹配模型。
-    # 保留这只猫已有的《猫苑》评价，避免修改操作耗尽 Render 内存。
-    print(
-        f"🐱 正在保存猫咪资料："
-        f"{target_cat.get('名字', '未命名')}"
-    )
-
-        # 保存匹配结果
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(
-                cats,
-                f,
-                ensure_ascii=False,
-                indent=4
-            )
-
-        print("🐱 猫咪资料和《猫苑》匹配均已完成")
-
-        return jsonify({
-            "status": "success",
-            "id": cat_id,
-            "message": "猫咪资料修改成功，匹配已更新"
-        })
-
-    except Exception as e:
-        print(f"《猫苑》重新匹配失败：{type(e).__name__}: {e}")
-
-        return jsonify({
-            "status": "success",
-            "id": cat_id,
-            "message": "猫咪基本资料已保存，但《猫苑》匹配未能更新，请稍后重试"
-        })
+    return jsonify({
+        "status": "success",
+        "id": cat_id,
+        "message": "猫咪资料修改成功；《猫苑》评价暂未重新匹配"
+    }), 200
 
 # =========================
 # 重新匹配全部猫咪
