@@ -462,14 +462,12 @@ def update_cat(cat_id):
         f"{target_cat.get('名字', '未命名')}"
     )
 
-    # 再执行《猫苑》匹配
-    try:
-        print(
-            f"🐱 正在重新匹配猫咪："
-            f"{target_cat.get('名字', '未命名')}"
-        )
-
-        target_cat["猫苑评价"] = match_catyuan(target_cat)
+    # 暂不在保存资料时重新加载语义匹配模型。
+    # 保留这只猫已有的《猫苑》评价，避免修改操作耗尽 Render 内存。
+    print(
+        f"🐱 正在保存猫咪资料："
+        f"{target_cat.get('名字', '未命名')}"
+    )
 
         # 保存匹配结果
         with open(DATA_FILE, "w", encoding="utf-8") as f:
