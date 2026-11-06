@@ -1,10 +1,11 @@
 import re
+import threading
+from functools import wraps
 from collections import Counter
 import hashlib
 import numpy as np
 from openpyxl import load_workbook
 
-from sentence_transformers import SentenceTransformer
 
 
 # ============================================================
@@ -80,29 +81,58 @@ model = None
 maoyuan_vectors = None
 
 
+_model_init_lock = threading.Lock()
+
+
+def serialized_initialization(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        with _model_init_lock:
+            return func(*args, **kwargs)
+    return wrapper
+
+
+@serialized_initialization
 def initialize_model():
-    global model
-    global maoyuan_vectors
-
-    if model is not None:
+    global model, maoyuan_vectors
+    if model is not None and maoyuan_vectors is not None:
         return
-
-    print("正在加载《猫苑》匹配模型……")
-    model = SentenceTransformer(MODEL_PATH)
-
-    print("正在预计算《猫苑》句子向量……")
-
-    maoyuan_texts = [
-        item["原文"]
-        for item in sentences
-    ]
-
-    maoyuan_vectors = model.encode(
-        maoyuan_texts,
-        normalize_embeddings=True
-    )
-
-    print("《猫苑》句子向量预计算完成！")
+    # Import the heavy runtime only when a match is actually requested.
+    print("正在加载《猫苑》匹配模型（CPU低内存模式）……", flush=True)
+    import gc
+    import torch
+    from sentence_transformers import SentenceTransformer
+    torch.set_num_threads(1)
+    pending_model = SentenceTransformer(MODEL_PATH, device="cpu")
+    pending_model.eval()
+    pending_vectors = None
+    total = len(sentences)
+    print(f"正在预计算《猫苑》句子向量：共{total}句，每批1句……", flush=True)
+    # Keep the existing model, sentence text, normalization and scoring unchanged.
+    # Calling encode in small groups releases per-call workspaces regularly.
+    try:
+        for start in range(0, total, 8):
+            texts = [item["原文"] for item in sentences[start:start + 8]]
+            with torch.inference_mode():
+                part = pending_model.encode(texts, batch_size=1,
+                    normalize_embeddings=True, convert_to_numpy=True,
+                    show_progress_bar=False)
+            if pending_vectors is None:
+                pending_vectors = np.empty((total, part.shape[1]), dtype=part.dtype)
+            pending_vectors[start:start + len(part)] = part
+            del part
+            if start % 128 == 0 or start + 8 >= total:
+                print(f"《猫苑》向量进度：{min(start + 8, total)}/{total}", flush=True)
+            gc.collect()
+        if pending_vectors is None:
+            raise ValueError("《猫苑》没有可用于匹配的句子")
+    except BaseException:
+        del pending_model, pending_vectors
+        gc.collect()
+        raise
+    # Publish both only after successful initialization.
+    model, maoyuan_vectors = pending_model, pending_vectors
+    print("《猫苑》句子向量预计算完成！", flush=True)
 
 
 # ============================================================
