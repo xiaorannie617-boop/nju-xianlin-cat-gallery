@@ -157,7 +157,7 @@ def get_cats():
 # 地图区域坐标 API
 # =========================
 
-MAP_AREAS_FILE = "map_areas.json"
+MAP_AREAS_FILE = os.environ.get("CAT_MAP_FILE", "map_areas.json")
 
 
 @app.route("/api/map_areas", methods=["GET"])
@@ -551,7 +551,7 @@ def release_legacy_lock(error):
 
 # Public contributor UI and API share the Render origin.
 from public_editor import register_public_editor
-register_public_editor(app, DATA_FILE, IMAGE_FOLDER, match_catyuan)
+register_public_editor(app, DATA_FILE, IMAGE_FOLDER, match_catyuan, MAP_AREAS_FILE)
 
 if __name__=="__main__":
 

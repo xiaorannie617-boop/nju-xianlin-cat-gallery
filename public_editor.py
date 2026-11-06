@@ -2,6 +2,7 @@
 import base64
 import hashlib
 import json
+import math
 import os
 import tempfile
 import uuid
@@ -154,7 +155,64 @@ def write_cat(cat_id=None):
         return jsonify(message='保存失败，原档案未被替换，请稍后再试'), 500
 
 
-def register_public_editor(app, data_file, image_folder, matcher):
+
+def map_data():
+    path = Path(current_app.config['PUBLIC_CAT_MAP'])
+    return json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
+
+
+@bp.route('/api/public/map_areas', methods=['GET'])
+def public_map():
+    with locked():
+        areas = map_data()
+    response = jsonify(areas=areas, versions={key: version(value) for key, value in areas.items()})
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@bp.route('/api/public/map_areas', methods=['PUT'])
+def update_public_map():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(message='无效地图资料'), 400
+    area, pos = data.get('area'), data.get('position')
+    if not isinstance(area, str) or not area.strip() or len(area) > 120 or not isinstance(pos, dict):
+        return jsonify(message='请填写活动区域并选择地图位置'), 400
+    area = area.strip()
+    place = pos.get('地图标准地点')
+    if not isinstance(place, str) or not place.strip() or len(place) > 200:
+        return jsonify(message='请填写地图标准地点'), 400
+    for axis in ('x', 'y'):
+        v = pos.get(axis)
+        if isinstance(v, bool) or not isinstance(v, (float, int)) or not math.isfinite(v) or not 0 <= v <= 100:
+            return jsonify(message='地图坐标必须在0到100之间'), 400
+    position = {'x': round(pos['x'], 2), 'y': round(pos['y'], 2), '地图标准地点': place.strip()}
+    with locked():
+        areas = map_data()
+        previous = areas.get(area)
+        if data.get('_version') != (version(previous) if previous is not None else None):
+            return jsonify(message='该区域已被其他访客修改，请重新载入地图后再定位'), 409
+        # 仅更新这个区域，不以客户端整张地图覆盖其他访客的新地点。
+        path = Path(current_app.config['PUBLIC_CAT_MAP'])
+        backup = Path(current_app.config['PUBLIC_CAT_BACKUPS'])
+        backup.mkdir(parents=True, exist_ok=True)
+        (backup / ('map-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ') + '-' + uuid.uuid4().hex + '.json')).write_text(json.dumps(areas, ensure_ascii=False, indent=4), encoding='utf-8')
+        areas[area] = position
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile('w', encoding='utf-8', dir=path.parent, delete=False) as f:
+                temporary = f.name
+                json.dump(areas, f, ensure_ascii=False, indent=4)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temporary, path)
+        finally:
+            if temporary and os.path.exists(temporary):
+                os.unlink(temporary)
+    return jsonify(status='success', area=area, position=position, version=version(position))
+
+def register_public_editor(app, data_file, image_folder, matcher, map_file="map_areas.json"):
+    app.config['PUBLIC_CAT_MAP'] = str(Path(map_file).resolve())
     app.config['PUBLIC_CAT_DATA'] = str(Path(data_file).resolve())
     app.config['PUBLIC_CAT_IMAGES'] = str(Path(image_folder).resolve())
     # 不放在网站根目录，避免被原有静态通配路由公开。
