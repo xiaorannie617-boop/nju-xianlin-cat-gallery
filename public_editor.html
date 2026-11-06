@@ -25,7 +25,7 @@
 const $=id=>document.getElementById(id),form=$('editor');
 const keys=['名字','活动区域','毛色','体型','性格','常见行为','发现地点','备注'];
 const parentOrigin='https://maoyuanjinlu.netlify.app';
-let cats=[],current=null,picture='',draft=null,busy=false,dirty=false;
+let cats=[],current=null,picture='',draft=null,busy=false,dirty=false,syncSerial=0;
 const field=k=>form.elements.namedItem(k);
 let mapAreas={},mapVersions={},mapReady=false;
 function point(x,y){$('mapX').value=x??'';$('mapY').value=y??'';$('marker').hidden=x===null||x===undefined||y===null||y===undefined;if(!$('marker').hidden){$('marker').style.left=x+'%';$('marker').style.top=y+'%';}$('mapInfo').textContent=$('marker').hidden?'尚未设置位置，请点击地图或填写百分比坐标。':'当前区域：'+field('活动区域').value+'；X='+x+'%，Y='+y+'%';}
@@ -38,20 +38,39 @@ $('campusMap').onclick=event=>{if(busy)return;if(!field('活动区域').value.tr
 ['mapX','mapY'].forEach(id=>$(id).addEventListener('change',()=>{if($('mapX').value!==''&&$('mapY').value!=='')point(Number($('mapX').value),Number($('mapY').value));}));
 $('usePlace').onclick=()=>{const name=$('standardPlace').value.trim();const pos=mapAreas[name]||Object.values(mapAreas).find(p=>p['地图标准地点']===name);if(!pos){$('mapStatus').textContent='没有该标准地点的已有位置，请在地图上点击定位。';return;}point(pos.x,pos.y);};
 $('saveMap').onclick=async()=>{if(busy)return;const area=field('活动区域').value.trim();if(!mapReady){$('mapStatus').textContent='请先成功载入地图，避免覆盖其他访客的修改。';return;}if(!area||!$('standardPlace').value.trim()||$('mapX').value===''||$('mapY').value===''){$('mapStatus').textContent='请填写活动区域、地图标准地点，并选择坐标。';return;}const position={x:Number($('mapX').value),y:Number($('mapY').value),'地图标准地点':$('standardPlace').value.trim()};busy=true;$('saveMap').disabled=true;$('save').disabled=true;try{const response=await fetch('/api/public/map_areas',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({area,position,_version:mapVersions[area]??null})});const result=await response.json();if(!response.ok)throw Error(result.message||'保存失败');await loadMap();$('mapStatus').textContent='地点已保存，可继续保存猫咪档案。';}catch(e){$('mapStatus').textContent=e.message;}finally{busy=false;$('saveMap').disabled=false;$('save').disabled=false;}};
-document.querySelectorAll('[data-trait]').forEach(button=>button.onclick=()=>{const input=field('性格'),trait=button.dataset.trait;if(!input.value.includes(trait))input.value+=(input.value?'，':'')+trait;dirty=true;});
+document.querySelectorAll('[data-trait]').forEach(button=>button.onclick=()=>{const input=field('性格'),trait=button.dataset.trait;if(!input.value.includes(trait))input.value+=(input.value?'，':'')+trait;markDirty();});
 function status(message,kind=''){ $('status').textContent=message;$('status').className=kind; }
 function showPhoto(src){$('preview').hidden=!src;if(src)$('preview').src=src;else $('preview').removeAttribute('src');}
-function fill(cat){keys.forEach(k=>field(k).value=cat?.[k]||'');current=cat;picture='';$('photo').value='';showPhoto(cat?.照片?'/images/'+encodeURIComponent(cat.照片):'');dirty=false;syncArea();}
+function fill(cat){keys.forEach(k=>field(k).value=cat?.[k]||'');current=cat;picture='';$('photo').value='';showPhoto(cat?.照片?'/images/'+encodeURIComponent(cat.照片):'');dirty=false;syncArea();if(cat)emitProfile(cat);else{syncSerial++;notify('maoyuan:clear',{});}}
 function notify(type,data){if(window.parent!==window)window.parent.postMessage({type,...data},parentOrigin);}
+async function emitProfile(cat){
+ const serial=++syncSerial;
+ try{
+  if(!cat.照片)throw Error('图鉴档案缺少照片，请先补充照片并保存。');
+  const response=await fetch('/images/'+encodeURIComponent(cat.照片),{cache:'no-store'});
+  if(!response.ok)throw Error('档案已保存，但照片读取失败，请重新同步。');
+  const blob=await response.blob();
+  if(blob.size>10*1024*1024||!['image/jpeg','image/png','image/webp'].includes(blob.type.split(';')[0]))throw Error('档案照片格式不支持或超过10 MB。');
+  const photo=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('照片读取失败'));reader.readAsDataURL(blob);});
+  if(serial===syncSerial&&!dirty)notify('maoyuan:profile',{cat,photo_data:photo});
+ }catch(e){if(serial===syncSerial)notify('maoyuan:profile-error',{message:e.message});}
+}
+function markDirty(){dirty=true;syncSerial++;notify('maoyuan:dirty',{});}
+window.addEventListener('message',event=>{
+ if(event.origin!==parentOrigin||event.source!==window.parent||event.data?.type!=='maoyuan:request-profile')return;
+ notify('maoyuan:ready',{protocol:2});
+ if(dirty)notify('maoyuan:dirty',{});else if(current)emitProfile(current);
+});
+
 async function load(selectId){try{const response=await fetch('/api/public/cats',{cache:'no-store'});if(!response.ok)throw Error('档案列表读取失败');cats=await response.json();$('cat').replaceChildren(new Option('请选择',''));cats.forEach(c=>$('cat').add(new Option(c.名字+' · '+c.活动区域,String(c.id))));if(selectId){$('cat').value=String(selectId);fill(cats.find(c=>c.id===selectId));}status('');}catch(e){status(e.message+'，请稍后重新载入。','error');}}
 function importDraft(){if(!draft)return;keys.forEach(k=>{if(typeof draft[k]==='string')field(k).value=draft[k];});if(draft.photo_data){picture=draft.photo_data;showPhoto(picture);}dirty=true;status('已带入相猫台的名字、照片、外观和小记，请补充活动区域、性格与行为。');}
 $('mode').onchange=()=>{$('existing').hidden=$('mode').value!=='edit';fill(null);if($('mode').value==='new'&&draft)importDraft();};
 $('cat').onchange=()=>fill(cats.find(c=>String(c.id)===$('cat').value)||null);
 $('refresh').onclick=()=>load(current?.id);
 $('import').onclick=()=>{if(current){status('为避免覆盖已有档案，请先切换为“新增一只猫咪”再带入相猫台资料。','error');return;}importDraft();};
-form.oninput=()=>dirty=true;
-$('photo').onchange=async()=>{const file=$('photo').files[0];if(!file)return;if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024){$('photo').value='';status('请选择10 MB以内的JPG、PNG或WebP图片。','error');return;}busy=true;$('save').disabled=true;try{picture=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(Error('图片读取失败'));r.readAsDataURL(file);});showPhoto(picture);dirty=true;}catch(e){status(e.message,'error');}finally{busy=false;$('save').disabled=false;}};
+form.oninput=markDirty;
+$('photo').onchange=async()=>{const file=$('photo').files[0];if(!file)return;if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024){$('photo').value='';status('请选择10 MB以内的JPG、PNG或WebP图片。','error');return;}busy=true;$('save').disabled=true;try{picture=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(Error('图片读取失败'));r.readAsDataURL(file);});showPhoto(picture);markDirty();}catch(e){status(e.message,'error');}finally{busy=false;$('save').disabled=false;}};
 window.addEventListener('message',event=>{if(event.origin!==parentOrigin||event.source!==window.parent||event.data?.type!=='maoyuan:prefill')return;draft=event.data.draft;$('import').hidden=!draft;if($('mode').value==='new'&&!dirty)importDraft();});
-form.onsubmit=async event=>{event.preventDefault();if(busy)return;if($('mode').value==='edit'&&!current){status('请先选择要修改的猫咪。','error');return;}const data=Object.fromEntries(keys.map(k=>[k,field(k).value.trim()]));if(picture)data.photo_data=picture;if(current)data._version=current._version;busy=true;form.setAttribute('aria-busy','true');Array.from(document.querySelectorAll('input,textarea,select,button')).forEach(e=>e.disabled=true);status('正在保存并匹配《猫苑》，请稍候…');try{const response=await fetch('/api/public/cats'+(current?'/'+current.id:''),{method:current?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});let result;try{result=await response.json();}catch{throw Error('服务暂时未返回有效结果，请先在图鉴中检查是否保存成功，再重试');}if(!response.ok)throw Error(result.message||'保存失败');current=result.cat;picture='';dirty=false;notify('maoyuan:saved',{cat:result.cat});$('mode').value='edit';$('existing').hidden=false;await load(result.cat.id);status('档案已公开保存，可以前往猫谱廊查看。','success');}catch(e){status(e.message,'error');}finally{busy=false;form.removeAttribute('aria-busy');Array.from(document.querySelectorAll('input,textarea,select,button')).forEach(e=>e.disabled=false);}};
-load();loadMap();notify('maoyuan:ready',{});
+form.onsubmit=async event=>{event.preventDefault();if(busy)return;if($('mode').value==='edit'&&!current){status('请先选择要修改的猫咪。','error');return;}const data=Object.fromEntries(keys.map(k=>[k,field(k).value.trim()]));if(picture)data.photo_data=picture;if(current)data._version=current._version;busy=true;form.setAttribute('aria-busy','true');Array.from(document.querySelectorAll('input,textarea,select,button')).forEach(e=>e.disabled=true);status('正在保存并匹配《猫苑》，请稍候…');try{const response=await fetch('/api/public/cats'+(current?'/'+current.id:''),{method:current?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});let result;try{result=await response.json();}catch{throw Error('服务暂时未返回有效结果，请先在图鉴中检查是否保存成功，再重试');}if(!response.ok)throw Error(result.message||'保存失败');current=result.cat;picture='';dirty=false;notify('maoyuan:saved',{cat:result.cat});emitProfile(result.cat);$('mode').value='edit';$('existing').hidden=false;await load(result.cat.id);status('档案及古籍匹配已保存，正在同步到右侧3D猫谱。','success');}catch(e){status(e.message,'error');}finally{busy=false;form.removeAttribute('aria-busy');Array.from(document.querySelectorAll('input,textarea,select,button')).forEach(e=>e.disabled=false);}};
+load();loadMap();notify('maoyuan:ready',{protocol:2});
 </script></body></html>
