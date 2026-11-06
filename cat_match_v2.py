@@ -1,4 +1,6 @@
 import re
+from collections import Counter
+import hashlib
 import numpy as np
 from openpyxl import load_workbook
 
@@ -134,19 +136,7 @@ def build_features(cat):
         # 构建性格特征
         # ============================================================
 
-        if "亲人" in personality:
-            feature = (
-                "猫喜欢与人亲近，"
-                "愿意接受人的接触，"
-                "性情驯熟，"
-                "对人友好，"
-                "喜欢和人相处。"
-            )
-        else:
-            feature = (
-                f"猫的性格是{personality}，"
-                f"表现出明显的{personality}性情。"
-            )
+        feature = f"猫的性格是{personality}。"
 
         # 加入常见行为中的性格信息
         behavior = str(cat.get("常见行为", "")).strip()
@@ -907,12 +897,6 @@ def context_penalty(text):
 def get_candidates(feature,feature_type,candidate_n=20):
     initialize_model()
 
-    feature_vector = model.encode(
-        [feature],
-        normalize_embeddings=True
-    )
-
-
     # --------------------------------------------------------
     # 现代特征向量
     # --------------------------------------------------------
@@ -1155,170 +1139,78 @@ def get_candidates(feature,feature_type,candidate_n=20):
 
         })
 
-    # --------------------------------------------------------
-    # 同编号先去重
-    # --------------------------------------------------------
-
-    best_by_id = {}
-
+    # 按句子去重，保留得分最高的版本；不再丢掉同篇的后续句子。
+    best_by_text = {}
     for item in candidates:
-
-        number = item["编号"]
-
-        if number not in best_by_id:
-
-            best_by_id[number] = item
-
-    candidates = list(
-        best_by_id.values()
-    )
-
-    # --------------------------------------------------------
-    # 排序
-    # --------------------------------------------------------
-
-    candidates.sort(
-
-        key=lambda x:
-            x["最终分数"],
-
-        reverse=True
-
-    )
-
-    return candidates[:candidate_n]
+        key = sentence_key(item["原文"])
+        if key not in best_by_text or item["最终分数"] > best_by_text[key]["最终分数"]:
+            best_by_text[key] = item
+    return sorted(best_by_text.values(), key=lambda x: x["最终分数"], reverse=True)[:candidate_n]
 
 
-# ============================================================
-# 10. 全局匹配
-# ============================================================
+def sentence_key(text):
+    return re.sub(r"[\W_]+", "", str(text))
 
-def match_all_features(
-    features
-):
 
-    # --------------------------------------------------------
-    # 第一步：
-    # 每个现代特征先召回候选
-    # --------------------------------------------------------
+def usage_counts(cats):
+    counts = Counter()
+    for cat in cats:
+        # 同一只猫重复保存的句子只计一次。
+        counts.update({sentence_key(e.get("原文", e.get("猫苑原文", "")))
+                       for e in cat.get("猫苑评价", [])} - {""})
+    return counts
 
-    all_candidates = []
 
-    for feature_index, item in enumerate(
-        features
-    ):
-
-        feature_type = item["类型"]
-
-        feature = item["特征"]
-
-        candidates = get_candidates(
-            feature,
-            feature_type,
-            candidate_n=20
-        )
-
-        for candidate in candidates:
-
-         for candidate in candidates:
-
-            candidate["特征序号"] = \
-                feature_index + 1
-
-            candidate["特征类型"] = \
-                feature_type
-
-            candidate["现代特征"] = \
-                feature
-
-            all_candidates.append(candidate)
-
-    # --------------------------------------------------------
-    # 第二步：
-    # 全局按照最终分数排序
-    # --------------------------------------------------------
-
-    all_candidates.sort(
-
-        key=lambda x:
-            x["最终分数"],
-
-        reverse=True
-
-    )
-
-    # --------------------------------------------------------
-    # 第三步：
-    # 全局分配
-    #
-    # 一个《猫苑》编号只能被一个现代特征使用
-    #
-    # 一个现代特征也只获得一个最终结果
-    # --------------------------------------------------------
-
-    used_maoyuan_ids = set()
-
-    used_features = set()
-
-    final_results = []
-
-    for candidate in all_candidates:
-
-        maoyuan_id = candidate["编号"]
-
-        feature_index = candidate["特征序号"]
-
-        # ----------------------------------------------------
-        # 已经有特征占用了这个《猫苑》编号
-        # ----------------------------------------------------
-
-        if maoyuan_id in used_maoyuan_ids:
-
+def select_candidates(features, pools, usage, identity="", score_margin=2.0):
+    """只在距离该特征最优分不超过2分的候选中平衡全站使用次数。"""
+    selected, used_ids, used_texts = [], set(), set()
+    # 候选较少的特征优先，避免被其他特征抢占唯一合适原文。
+    slots = []
+    for index, (feature, pool) in enumerate(zip(features, pools)):
+        if not pool:
             continue
-
-        # ----------------------------------------------------
-        # 这个现代特征已经得到结果
-        # ----------------------------------------------------
-
-        if feature_index in used_features:
-
+        best = max(c["最终分数"] for c in pool)
+        eligible = [c for c in pool if c["最终分数"] >= best - score_margin]
+        slots.append((index, feature, eligible))
+    for index, feature, pool in sorted(slots, key=lambda slot: (len(slot[2]), slot[0])):
+        available = [c for c in pool if c["编号"] not in used_ids
+                     and sentence_key(c["原文"]) not in used_texts]
+        if not available:
             continue
+        def rank(c):
+            key = sentence_key(c["原文"])
+            tie = hashlib.sha256((str(identity) + feature["特征"] + key).encode()).hexdigest()
+            return (c["最终分数"] - 3.0 * usage[key], tie)
+        chosen = dict(max(available, key=rank))
+        key = sentence_key(chosen["原文"])
+        chosen.update({"特征序号": index + 1, "特征类型": feature["类型"],
+                       "现代特征": feature["特征"], "此前使用次数": usage[key]})
+        used_ids.add(chosen["编号"])
+        used_texts.add(key)
+        usage[key] += 1
+        selected.append(chosen)
+    return sorted(selected, key=lambda c: c["特征序号"])
 
-        # ----------------------------------------------------
-        # 分配
-        # ----------------------------------------------------
 
-        used_maoyuan_ids.add(
-            maoyuan_id
-        )
+def match_all_features(features, usage=None, identity=""):
+    pools = [get_candidates(f["特征"], f["类型"], candidate_n=60) for f in features]
+    return select_candidates(features, pools, usage if usage is not None else Counter(), identity)
 
-        used_features.add(
-            feature_index
-        )
 
-        final_results.append(
-            candidate
-        )
-
-    # --------------------------------------------------------
-    # 按现代特征顺序排列
-    # --------------------------------------------------------
-
-    final_results.sort(
-
-        key=lambda x:
-            x["特征序号"]
-
-    )
-
-    return final_results
+def rematch_cats(cats):
+    """统一重新分配，不使用旧结果累计次数；同一输入得到稳定结果。"""
+    usage = Counter()
+    for cat in sorted(cats, key=lambda c: (str(c.get("id", "")), c.get("名字", ""))):
+        cat["猫苑评价"] = match_all_features(build_features(cat), usage,
+                                            str(cat.get("id", cat.get("名字", ""))))
+    return cats
 
 
 # ============================================================
 # 11. 网站调用接口
 # ============================================================
 
-def match_catyuan(cat):
+def match_catyuan(cat, existing_cats=None):
     """
     给网站调用的《猫苑》匹配函数。
 
@@ -1333,7 +1225,8 @@ def match_catyuan(cat):
     features = build_features(cat)
 
     # 2. 进行全局语义匹配
-    results = match_all_features(features)
+    results = match_all_features(features, usage_counts(existing_cats or []),
+                                 str(cat.get("id", cat.get("名字", ""))))
 
     return results
 

@@ -3,7 +3,7 @@ import json
 import os
 from functools import wraps
 from werkzeug.utils import secure_filename
-from cat_match_v2 import match_catyuan
+from cat_match_v2 import match_catyuan, rematch_cats
 
 
 app = Flask(__name__)
@@ -294,7 +294,7 @@ def add_cat():
 
     print("④ 开始进行《猫苑》匹配……")
 
-    new_cat["猫苑评价"] = match_catyuan(new_cat)
+    new_cat["猫苑评价"] = match_catyuan(new_cat, existing_cats=cats)
 
     print(
         f"④ 《猫苑》匹配完成："
@@ -484,19 +484,7 @@ def rematch_all():
         print("开始重新匹配所有猫咪")
         print("猫咪数量：", len(cats))
 
-        # 逐只重新匹配
-        for index, cat in enumerate(cats, start=1):
-
-            print(
-                f"正在匹配第 {index} 只猫："
-                f"{cat.get('名字', '未命名')}"
-            )
-
-            cat["猫苑评价"] = match_catyuan(cat)
-
-            print(
-                f"第 {index} 只猫匹配完成"
-            )
+        rematch_cats(cats)
 
         # 保存
         with open(
