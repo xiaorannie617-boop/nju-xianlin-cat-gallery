@@ -10,9 +10,57 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 import fcntl
-from flask import Blueprint, current_app, jsonify, request, send_from_directory
+from flask import Blueprint, current_app, jsonify, request, send_from_directory, g
+import resource
+import time
+import threading
 
 bp = Blueprint('public_editor', __name__)
+# Only metadata is logged: no names, descriptions, image contents or credentials.
+def diagnostic_line(trace, stage, started):
+    try:
+        peak_mb = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)
+        memory = {'process_peak_mb': peak_mb}
+        for label, path in [('container_current_bytes', '/sys/fs/cgroup/memory.current'),
+                            ('container_limit_bytes', '/sys/fs/cgroup/memory.max')]:
+            try:
+                memory[label] = Path(path).read_text().strip()
+            except OSError:
+                pass
+        print('[CAT_SAVE_DIAG] ' + json.dumps({'request_id': trace, 'pid': os.getpid(),
+              'stage': stage, 'elapsed_s': round(time.monotonic() - started, 2),
+              **memory}, ensure_ascii=False), flush=True)
+    except Exception:
+        # Diagnostics must not change the request result.
+        pass
+
+
+def diagnostic(stage):
+    diagnostic_line(g.cat_diag_id, stage, g.cat_diag_started)
+
+
+@bp.before_request
+def begin_diagnostic():
+    if request.method in {'POST', 'PUT'} and request.path.startswith('/api/public/cats'):
+        g.cat_diag_id = uuid.uuid4().hex[:12]
+        g.cat_diag_started = time.monotonic()
+        diagnostic('01_request_entered bytes=' + str(request.content_length))
+
+
+@bp.after_request
+def finish_diagnostic(response):
+    if hasattr(g, 'cat_diag_id'):
+        diagnostic('99_response status=' + str(response.status_code))
+        response.headers['X-Cat-Request-ID'] = g.cat_diag_id
+    return response
+
+
+@bp.teardown_request
+def diagnostic_exception(error):
+    if error is not None and hasattr(g, 'cat_diag_id'):
+        diagnostic('ERROR_unhandled type=' + type(error).__name__)
+
+
 FIELDS = {'名字': 40, '活动区域': 120, '毛色': 100, '体型': 100,
           '性格': 500, '常见行为': 2000, '发现地点': 200, '备注': 2000}
 
@@ -97,6 +145,7 @@ def list_cats():
 def write_cat(cat_id=None):
     if request.content_length and request.content_length > 16 * 1024 * 1024:
         return jsonify(message='提交内容过大'), 413
+    diagnostic('02_reading_request_json')
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
         return jsonify(message='没有收到有效资料'), 400
@@ -114,9 +163,12 @@ def write_cat(cat_id=None):
             picture = image_bytes(payload['photo_data'])
         except ValueError as e:
             return jsonify(message=str(e)), 400
+    diagnostic('03_fields_and_image_validated')
     created_photo = None
     try:
+        diagnostic('04_waiting_for_data_lock')
         with locked():
+            diagnostic('05_lock_acquired_reading_database')
             original = data_path().read_text(encoding='utf-8')
             cats = json.loads(original)
             previous = next((c for c in cats if c['id'] == cat_id), None) if cat_id is not None else None
@@ -132,8 +184,21 @@ def write_cat(cat_id=None):
             if cat_id is None:
                 item['id'] = max((int(c['id']) for c in cats), default=0) + 1
             # 不信任客户端提供的ID、图片路径或古文匹配结果。
-            matches = current_app.config['PUBLIC_CAT_MATCHER'](item, existing_cats=[c for c in cats if c['id'] != item['id']])
+            diagnostic('06_matching_started')
+            stop_heartbeat = threading.Event()
+            trace, started = g.cat_diag_id, g.cat_diag_started
+            def heartbeat():
+                while not stop_heartbeat.wait(10):
+                    diagnostic_line(trace, '06_matching_still_running', started)
+            thread = threading.Thread(target=heartbeat, daemon=True)
+            thread.start()
+            try:
+                matches = current_app.config['PUBLIC_CAT_MATCHER'](item, existing_cats=[c for c in cats if c['id'] != item['id']])
+            finally:
+                stop_heartbeat.set()
+            diagnostic('07_matching_finished')
             item['猫苑评价'] = matches
+            diagnostic('08_writing_photo')
             if picture:
                 folder = Path(current_app.config['PUBLIC_CAT_IMAGES']).resolve()
                 folder.mkdir(parents=True, exist_ok=True)
@@ -146,11 +211,14 @@ def write_cat(cat_id=None):
                 cats.append(item)
             else:
                 cats[cats.index(previous)] = item
+            diagnostic('09_backing_up_and_saving_database')
             save(cats, original)
+            diagnostic('10_database_saved')
         return jsonify(status='success', cat=dict(item, _version=version(item))), 200 if previous else 201
     except Exception:
         if created_photo:
             created_photo.unlink(missing_ok=True)
+        diagnostic('ERROR_save_failed')
         current_app.logger.exception('公开猫咪档案保存失败')
         return jsonify(message='保存失败，原档案未被替换，请稍后再试'), 500
 
