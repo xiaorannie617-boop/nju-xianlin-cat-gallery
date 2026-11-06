@@ -7,6 +7,7 @@ from cat_match_v2 import match_catyuan, rematch_cats
 
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
 def login_required(func):
     @wraps(func)
@@ -41,8 +42,8 @@ ADMIN_PASSWORD = os.environ.get(
 )
 
 
-DATA_FILE = "cats_detail.json"
-IMAGE_FOLDER = "images"
+DATA_FILE = os.environ.get("CAT_DATA_FILE", "cats_detail.json")
+IMAGE_FOLDER = os.environ.get("CAT_IMAGE_FOLDER", "images")
 
 
 if not os.path.exists(IMAGE_FOLDER):
@@ -123,6 +124,10 @@ def admin_logout():
 @app.route("/<path:path>")
 def static_files(path):
 
+    if path == "cats_detail.json":
+        return send_from_directory(os.path.dirname(os.path.abspath(DATA_FILE)), os.path.basename(DATA_FILE), max_age=0)
+    if path.startswith("images/"):
+        return send_from_directory(os.path.abspath(IMAGE_FOLDER), path[len("images/"):])
     return send_from_directory(
         ".",
         path
@@ -385,6 +390,7 @@ def delete_cat(cat_id):
 # 修改猫咪信息
 # =========================
 
+@app.route("/api/update_cat/<int:cat_id>", methods=["PUT"])
 @login_required
 def update_cat(cat_id):
     data = request.get_json(silent=True)
@@ -524,6 +530,28 @@ def rematch_all():
                 "message": str(e)
             }
         ), 500
+
+# Legacy administrator operations must not bypass public validation or race public edits.
+from flask import g
+from public_editor import locked
+
+@app.before_request
+def protect_legacy_writes():
+    if request.method in {"POST", "PUT", "DELETE", "PATCH"} and request.path.startswith("/api/") and not request.path.startswith("/api/public/"):
+        if not session.get("admin_logged_in"):
+            return jsonify(status="error", message="管理员操作请先登录"), 401
+        g.cat_write_lock = locked()
+        g.cat_write_lock.__enter__()
+
+@app.teardown_request
+def release_legacy_lock(error):
+    lock = g.pop("cat_write_lock", None)
+    if lock:
+        lock.__exit__(None, None, None)
+
+# Public contributor UI and API share the Render origin.
+from public_editor import register_public_editor
+register_public_editor(app, DATA_FILE, IMAGE_FOLDER, match_catyuan)
 
 if __name__=="__main__":
 

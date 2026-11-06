@@ -1,0 +1,163 @@
+"""公开投稿与编辑。仅注册此模块的路由；无需管理员登录。"""
+import base64
+import hashlib
+import json
+import os
+import tempfile
+import uuid
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from pathlib import Path
+import fcntl
+from flask import Blueprint, current_app, jsonify, request, send_from_directory
+
+bp = Blueprint('public_editor', __name__)
+FIELDS = {'名字': 40, '活动区域': 120, '毛色': 100, '体型': 100,
+          '性格': 500, '常见行为': 2000, '发现地点': 200, '备注': 2000}
+
+
+def data_path():
+    return Path(current_app.config['PUBLIC_CAT_DATA']).resolve()
+
+
+def version(cat):
+    return hashlib.sha256(json.dumps(cat, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+
+
+@contextmanager
+def locked():
+    path = data_path().with_suffix('.lock')
+    with path.open('a') as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def load():
+    return json.loads(data_path().read_text(encoding='utf-8'))
+
+
+def save(cats, original):
+    folder = Path(current_app.config['PUBLIC_CAT_BACKUPS']).resolve()
+    folder.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+    (folder / (stamp + '-' + uuid.uuid4().hex + '.json')).write_text(original, encoding='utf-8')
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile('w', encoding='utf-8', dir=data_path().parent, delete=False) as f:
+            temporary = f.name
+            json.dump(cats, f, ensure_ascii=False, indent=4)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, data_path())
+    finally:
+        if temporary and os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def image_bytes(value):
+    if not isinstance(value, str) or len(value) > 14500000:
+        raise ValueError('照片过大，请选择不超过10 MB的图片')
+    try:
+        head, encoded = value.split(',', 1)
+        mime = head.split(';')[0]
+        ext = {'data:image/jpeg': '.jpg', 'data:image/png': '.png', 'data:image/webp': '.webp'}[mime]
+        raw = base64.b64decode(encoded, validate=True)
+    except (ValueError, KeyError):
+        raise ValueError('照片格式必须为JPG、PNG或WebP')
+    if not raw or len(raw) > 10 * 1024 * 1024:
+        raise ValueError('照片不能为空且不得超过10 MB')
+    valid = ((ext == '.jpg' and raw.startswith(b'\xff\xd8\xff')) or
+             (ext == '.png' and raw.startswith(b'\x89PNG\r\n\x1a\n')) or
+             (ext == '.webp' and raw[:4] == b'RIFF' and raw[8:12] == b'WEBP'))
+    if not valid:
+        raise ValueError('图片内容与格式不符')
+    return raw, ext
+
+
+@bp.route('/contribute')
+def editor():
+    return send_from_directory(Path(__file__).parent, 'public_editor.html')
+
+
+@bp.route('/api/public/cats', methods=['GET'])
+def list_cats():
+    with locked():
+        cats = load()
+    response = jsonify([dict(c, _version=version(c)) for c in cats])
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@bp.route('/api/public/cats', methods=['POST'])
+@bp.route('/api/public/cats/<int:cat_id>', methods=['PUT'])
+def write_cat(cat_id=None):
+    if request.content_length and request.content_length > 16 * 1024 * 1024:
+        return jsonify(message='提交内容过大'), 413
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify(message='没有收到有效资料'), 400
+    cleaned = {}
+    for key, limit in FIELDS.items():
+        value = payload.get(key, '')
+        if not isinstance(value, str) or len(value.strip()) > limit:
+            return jsonify(message=key + '格式不正确或过长'), 400
+        cleaned[key] = value.strip()
+    if not cleaned['名字'] or not cleaned['活动区域']:
+        return jsonify(message='请填写名字和活动区域'), 400
+    picture = None
+    if payload.get('photo_data'):
+        try:
+            picture = image_bytes(payload['photo_data'])
+        except ValueError as e:
+            return jsonify(message=str(e)), 400
+    created_photo = None
+    try:
+        with locked():
+            original = data_path().read_text(encoding='utf-8')
+            cats = json.loads(original)
+            previous = next((c for c in cats if c['id'] == cat_id), None) if cat_id is not None else None
+            if cat_id is not None:
+                if previous is None:
+                    return jsonify(message='这只猫已不存在，请刷新列表'), 404
+                if payload.get('_version') != version(previous):
+                    return jsonify(message='其他访客刚刚更新了这只猫。你的输入仍保留，请先复制后重新载入最新档案再修改。'), 409
+            elif not picture:
+                return jsonify(message='新增档案请上传真实猫咪照片'), 400
+            item = dict(previous or {})
+            item.update(cleaned)
+            if cat_id is None:
+                item['id'] = max((int(c['id']) for c in cats), default=0) + 1
+            # 不信任客户端提供的ID、图片路径或古文匹配结果。
+            matches = current_app.config['PUBLIC_CAT_MATCHER'](item, existing_cats=[c for c in cats if c['id'] != item['id']])
+            item['猫苑评价'] = matches
+            if picture:
+                folder = Path(current_app.config['PUBLIC_CAT_IMAGES']).resolve()
+                folder.mkdir(parents=True, exist_ok=True)
+                raw, ext = picture
+                created_photo = folder / ('public-' + uuid.uuid4().hex + ext)
+                created_photo.write_bytes(raw)
+                item['照片'] = created_photo.name
+            item['更新时间'] = datetime.now(timezone.utc).isoformat()
+            if previous is None:
+                cats.append(item)
+            else:
+                cats[cats.index(previous)] = item
+            save(cats, original)
+        return jsonify(status='success', cat=dict(item, _version=version(item))), 200 if previous else 201
+    except Exception:
+        if created_photo:
+            created_photo.unlink(missing_ok=True)
+        current_app.logger.exception('公开猫咪档案保存失败')
+        return jsonify(message='保存失败，原档案未被替换，请稍后再试'), 500
+
+
+def register_public_editor(app, data_file, image_folder, matcher):
+    app.config['PUBLIC_CAT_DATA'] = str(Path(data_file).resolve())
+    app.config['PUBLIC_CAT_IMAGES'] = str(Path(image_folder).resolve())
+    # 不放在网站根目录，避免被原有静态通配路由公开。
+    app.config['PUBLIC_CAT_BACKUPS'] = os.environ.get('CAT_BACKUP_DIR', str(Path(data_file).resolve().parent.parent / 'cat-private-backups'))
+    app.config['PUBLIC_CAT_MATCHER'] = matcher
+    app.register_blueprint(bp)
