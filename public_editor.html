@@ -15,15 +15,15 @@
 <div class="actions"><button type="button" id="saveMap">保存这个地点的地图位置</button></div><p id="mapStatus" role="status" class="hint"></p>
 <p class="hint">地图位置与猫咪档案分别保存。修改已有区域的位置会影响该区域全部猫咪；只想记录新的目击位置时，请新增一个不同名称的活动区域。</p>
 </details>
-<label>真实猫咪照片<input id="photo" type="file" accept="image/jpeg,image/png,image/webp"></label><p id="photoHint" class="hint">新增档案必须提供真实照片；编辑时不选新照片则保留原图。</p><img id="preview" alt="档案照片预览" hidden>
+<div class="row"><label>性别<input name="性别" maxlength="20" placeholder="公 / 母 / 未知"></label><label>绝育情况<input name="绝育情况" maxlength="30" placeholder="已绝育 / 未绝育 / 未知"></label></div><label>真实猫咪照片<input id="photo" type="file" accept="image/jpeg,image/png,image/webp"></label><p id="photoHint" class="hint">新增档案必须提供真实照片；编辑时不选新照片则保留原图。</p><img id="preview" alt="档案照片预览" hidden>
 <div class="row"><label>毛色<input name="毛色" maxlength="100"></label><label>体型<input name="体型" maxlength="100"></label></div>
 <p class="hint">以下是古文匹配使用的完整观察资料，可自由填写，不限于立体小像的外观选项。</p><div id="traitSuggestions" class="hint">快捷补充性格（可继续修改）：<button type="button" data-trait="亲人">亲人</button> <button type="button" data-trait="活泼">活泼</button> <button type="button" data-trait="胆小">胆小</button> <button type="button" data-trait="警惕">警惕</button> <button type="button" data-trait="独立">独立</button></div><label>性格<textarea name="性格" maxlength="500"></textarea></label><label>常见行为<textarea name="常见行为" maxlength="2000"></textarea></label><label>发现地点<input name="发现地点" maxlength="200"></label><label>备注<textarea name="备注" maxlength="2000"></textarea></label>
 <p class="hint">保存时自动匹配《猫苑》原文，第一次运行模型可能需要较长时间，请勿重复提交。这里的照片和资料会上传并公开到校园图鉴；相猫台生成的个人猫谱仍可单独下载。</p>
-<div class="actions"><button class="primary" id="save" type="submit">保存并公开到图鉴</button><button id="import" type="button" hidden>使用相猫台当前资料</button><a href="/" target="_blank" rel="noopener">查看图鉴 ↗</a></div></form><p id="status" role="status" aria-live="polite"></p>
+<div class="actions"><button class="primary" id="save" type="submit">保存并公开到图鉴</button><button id="rematch" type="button">重试 / 更新古籍匹配</button><button id="import" type="button" hidden>使用相猫台当前资料</button><a href="/" target="_blank" rel="noopener">查看图鉴 ↗</a></div></form><p id="status" role="status" aria-live="polite"></p>
 <script>
 'use strict';
 const $=id=>document.getElementById(id),form=$('editor');
-const keys=['名字','活动区域','毛色','体型','性格','常见行为','发现地点','备注'];
+const keys=['名字','活动区域','毛色','体型','性格','常见行为','发现地点','备注','性别','绝育情况'];
 const parentOrigin='https://maoyuanjinlu.netlify.app';
 let cats=[],current=null,picture='',draft=null,busy=false,dirty=false,syncSerial=0;
 const field=k=>form.elements.namedItem(k);
@@ -71,6 +71,29 @@ $('import').onclick=()=>{if(current){status('为避免覆盖已有档案，请�
 form.oninput=markDirty;
 $('photo').onchange=async()=>{const file=$('photo').files[0];if(!file)return;if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024){$('photo').value='';status('请选择10 MB以内的JPG、PNG或WebP图片。','error');return;}busy=true;$('save').disabled=true;try{picture=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(Error('图片读取失败'));r.readAsDataURL(file);});showPhoto(picture);markDirty();}catch(e){status(e.message,'error');}finally{busy=false;$('save').disabled=false;}};
 window.addEventListener('message',event=>{if(event.origin!==parentOrigin||event.source!==window.parent||event.data?.type!=='maoyuan:prefill')return;draft=event.data.draft;$('import').hidden=!draft;if($('mode').value==='new'&&!dirty)importDraft();});
-form.onsubmit=async event=>{event.preventDefault();if(busy)return;if($('mode').value==='edit'&&!current){status('请先选择要修改的猫咪。','error');return;}const data=Object.fromEntries(keys.map(k=>[k,field(k).value.trim()]));if(picture)data.photo_data=picture;if(current)data._version=current._version;busy=true;form.setAttribute('aria-busy','true');Array.from(document.querySelectorAll('input,textarea,select,button')).forEach(e=>e.disabled=true);status('正在保存并匹配《猫苑》，请稍候…');try{const response=await fetch('/api/public/cats'+(current?'/'+current.id:''),{method:current?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});let result;try{result=await response.json();}catch{throw Error('服务暂时未返回有效结果，请先在图鉴中检查是否保存成功，再重试');}if(!response.ok)throw Error(result.message||'保存失败');current=result.cat;picture='';dirty=false;notify('maoyuan:saved',{cat:result.cat});emitProfile(result.cat);$('mode').value='edit';$('existing').hidden=false;await load(result.cat.id);status('档案及古籍匹配已保存，正在同步到右侧3D猫谱。','success');}catch(e){status(e.message,'error');}finally{busy=false;form.removeAttribute('aria-busy');Array.from(document.querySelectorAll('input,textarea,select,button')).forEach(e=>e.disabled=false);}};
+async function matchSaved(cat){
+ status('档案和照片已存入云端，正在匹配《猫苑》；匹配失败也不会删除档案。');
+ try{
+  const response=await fetch('/api/public/cats/'+cat.id+'/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({_version:cat._version})});
+  let result;try{result=await response.json();}catch{throw Error('匹配服务中断，但档案已保存。请重新载入列表后单独重试匹配，不要重复新增。');}
+  if(!response.ok)throw Error(result.message||'匹配未完成，档案已保存');
+  await load(result.cat.id);status('云端档案和古籍匹配已保存，正在同步猫谱。','success');
+ }catch(e){status(e.message,'error');}
+}
+function controls(disabled){busy=disabled;form.setAttribute('aria-busy',String(disabled));Array.from(document.querySelectorAll('input,textarea,select,button')).forEach(e=>e.disabled=disabled);}
+$('rematch').onclick=async()=>{if(busy)return;if(!current||dirty){status('请先选择已保存的猫咪；有修改时请先保存档案。','error');return;}controls(true);try{await matchSaved(current);}finally{controls(false);}};
+form.onsubmit=async event=>{
+ event.preventDefault();if(busy)return;if($('mode').value==='edit'&&!current){status('请先选择猫咪。','error');return;}
+ const data=Object.fromEntries(keys.map(k=>[k,field(k).value.trim()]));if(!current){let token=sessionStorage.getItem('maoyuan-pending-submit');if(!token){token=crypto.randomUUID();sessionStorage.setItem('maoyuan-pending-submit',token);}data.submission_id=token;}if(picture)data.photo_data=picture;if(current)data._version=current._version;
+ controls(true);status('正在把档案和照片保存到云端…');
+ try{
+  const response=await fetch('/api/public/cats'+(current?'/'+current.id:''),{method:current?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  let result;try{result=await response.json();}catch{throw Error('未收到保存结果，请先重新载入列表确认是否已保存，勿重复新增。');}
+  if(!response.ok)throw Error(result.message||'保存失败');
+  sessionStorage.removeItem('maoyuan-pending-submit');current=result.cat;picture='';dirty=false;$('mode').value='edit';$('existing').hidden=false;notify('maoyuan:saved',{cat:result.cat});emitProfile(result.cat);
+  await load(result.cat.id);await matchSaved(result.cat);
+ }catch(e){status(e.message,'error');}finally{controls(false);}
+};
+
 load();loadMap();notify('maoyuan:ready',{protocol:2});
 </script></body></html>

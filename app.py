@@ -1,562 +1,229 @@
-from flask import Flask, request, jsonify, send_from_directory, session, redirect
+"""猫苑图鉴 Supabase持久化版：沿用原网页与低内存匹配模块。"""
+import base64
 import json
+import math
 import os
-from functools import wraps
-from werkzeug.utils import secure_filename
-from cat_match_v2 import match_catyuan, rematch_cats
-
+from pathlib import Path
+import threading
+import uuid
+from flask import Flask, Response, abort, jsonify, redirect, request, send_from_directory, session
+from cloud_store import Store, CloudError, cat_view
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
-
-def login_required(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if not session.get("admin_logged_in"):
-            return jsonify({
-                "status": "error",
-                "message": "请先登录管理员账号"
-            }), 401
-
-        return func(*args, **kwargs)
-
-    return wrapper
-
-# =========================
-# 管理员登录配置
-# =========================
-
-app.secret_key = os.environ.get(
-    "SECRET_KEY",
-    "local-development-secret"
-)
-
-ADMIN_USERNAME = os.environ.get(
-    "ADMIN_USERNAME",
-    "admin"
-)
-
-ADMIN_PASSWORD = os.environ.get(
-    "ADMIN_PASSWORD",
-    "123abc"
-)
+app.secret_key = os.environ.get('SECRET_KEY') or os.urandom(32)
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+store = Store()
+match_lock = threading.Lock()
+FIELDS = {'名字':40,'活动区域':120,'毛色':100,'体型':100,'性格':500,'常见行为':2000,'发现地点':200,'备注':2000,'性别':20,'绝育情况':30}
 
 
-DATA_FILE = os.environ.get("CAT_DATA_FILE", "cats_detail.json")
-IMAGE_FOLDER = os.environ.get("CAT_IMAGE_FOLDER", "images")
+@app.errorhandler(CloudError)
+def cloud_error(error):
+    status = 409 if error.status == 409 else 503
+    app.logger.error('CLOUD_STORAGE_ERROR status=%s', error.status)
+    return jsonify(message='资料已被其他访客修改，请重新载入' if status == 409 else '云端存储暂不可用，请检查Supabase配置或服务状态。没有切换到临时文件保存。'), status
 
 
-if not os.path.exists(IMAGE_FOLDER):
-    os.makedirs(IMAGE_FOLDER)
+@app.errorhandler(413)
+def too_large(error):
+    return jsonify(message='提交内容过大，请选择10 MB以内照片'), 413
 
 
-
-# 首页文件
-
-@app.route("/")
-def index():
-
-    return send_from_directory(
-        ".",
-        "index.html"
-    )
-
-# =========================
-# 管理员后台登录
-# =========================
-
-@app.route("/admin")
-def admin_page():
-
-    if not session.get("admin_logged_in"):
-        return redirect("/admin_login")
-
-    return send_from_directory(
-        ".",
-        "admin.html"
-    )
+def cats():
+    return [cat_view(r) for r in store.rows('maoyuan_cats')]
 
 
-@app.route("/admin_login", methods=["GET", "POST"])
-def admin_login():
-
-    if request.method == "GET":
-
-        return send_from_directory(
-            ".",
-            "admin_login.html"
-        )
-
-    username = request.form.get("username", "")
-    password = request.form.get("password", "")
-
-    if (
-        username == ADMIN_USERNAME
-        and password == ADMIN_PASSWORD
-    ):
-
-        session["admin_logged_in"] = True
-
-        return redirect("/admin")
-
-    return """
-    <script>
-        alert("用户名或密码错误");
-        window.location.href = "/admin_login";
-    </script>
-    """
+def maps():
+    rows = store.rows('maoyuan_map_areas')
+    return {r['name']:r['data'] for r in rows}, {r['name']:str(r['revision']) for r in rows}
 
 
-@app.route("/admin_logout")
-def admin_logout():
-
-    session.pop(
-        "admin_logged_in",
-        None
-    )
-
-    return redirect("/")
-
-
-
-# 静态文件
-
-@app.route("/<path:path>")
-def static_files(path):
-
-    if path == "cats_detail.json":
-        return send_from_directory(os.path.dirname(os.path.abspath(DATA_FILE)), os.path.basename(DATA_FILE), max_age=0)
-    if path.startswith("images/"):
-        return send_from_directory(os.path.abspath(IMAGE_FOLDER), path[len("images/"):])
-    return send_from_directory(
-        ".",
-        path
-    )
+def parse_image(value):
+    try:
+        head, encoded = value.split(',',1)
+        mime = head.split(';')[0].removeprefix('data:')
+        raw = base64.b64decode(encoded, validate=True)
+    except (ValueError, AttributeError): abort(400, '照片格式无效')
+    ext = {'image/jpeg':'.jpg','image/png':'.png','image/webp':'.webp'}.get(mime)
+    valid = (mime == 'image/jpeg' and raw.startswith(b'\xff\xd8\xff')) or (mime == 'image/png' and raw.startswith(b'\x89PNG\r\n\x1a\n')) or (mime == 'image/webp' and raw[:4] == b'RIFF' and raw[8:12] == b'WEBP')
+    if not ext or not valid or not raw or len(raw)>10*1024*1024: abort(400, '照片格式或大小不符合要求')
+    return raw,mime,ext
 
 
+@app.route('/')
+def index(): return send_from_directory('.', 'index.html')
 
 
-# 获取猫咪数据
+@app.route('/contribute')
+def contribute(): return send_from_directory('.', 'public_editor.html')
 
-@app.route("/api/cats")
+
+@app.route('/api/cats')
+@app.route('/api/public/cats')
+@app.route('/cats_detail.json')
 def get_cats():
+    response=jsonify(cats());response.headers['Cache-Control']='no-store';return response
 
 
-    with open(
-        DATA_FILE,
-        "r",
-        encoding="utf-8"
-    ) as f:
-
-        cats=json.load(f)
+@app.route('/api/map_areas')
+@app.route('/map_areas.json')
+def get_map():
+    response=jsonify(maps()[0]);response.headers['Cache-Control']='no-store';return response
 
 
-    return jsonify(cats)
-
-# =========================
-# 地图区域坐标 API
-# =========================
-
-MAP_AREAS_FILE = os.environ.get("CAT_MAP_FILE", "map_areas.json")
+@app.route('/api/public/map_areas')
+def get_public_map():
+    areas,versions=maps();response=jsonify(areas=areas,versions=versions);response.headers['Cache-Control']='no-store';return response
 
 
-@app.route("/api/map_areas", methods=["GET"])
-def get_map_areas():
-
-    if not os.path.exists(MAP_AREAS_FILE):
-
-        return jsonify({})
-
-    with open(
-        MAP_AREAS_FILE,
-        "r",
-        encoding="utf-8"
-    ) as f:
-
-        map_areas = json.load(f)
-
-    return jsonify(map_areas)
-
-
-@app.route("/api/map_areas", methods=["POST"])
-def save_map_areas():
-
-    map_areas = request.json
-
-    if map_areas is None:
-        return jsonify({
-            "status": "error",
-            "message": "没有收到地图数据"
-        }), 400
-
-    with open(
-        MAP_AREAS_FILE,
-        "w",
-        encoding="utf-8"
-    ) as f:
-
-        json.dump(
-            map_areas,
-            f,
-            ensure_ascii=False,
-            indent=4
-        )
-
-    return jsonify({
-        "status": "success"
-    })
+@app.route('/api/public/map_areas',methods=['PUT'])
+def put_map():
+    if not store.rows('maoyuan_cats'):
+        return jsonify(message='云端尚未完成迁移，请管理员先完成迁移，不要重新录入旧档案'),503
+    p=request.get_json(silent=True)
+    if not isinstance(p,dict):return jsonify(message='无效资料'),400
+    name,pos=p.get('area'),p.get('position')
+    if not isinstance(name,str) or not 1<=len(name.strip())<=120 or not isinstance(pos,dict):return jsonify(message='请填写活动区域'),400
+    place=pos.get('地图标准地点')
+    if not isinstance(place,str) or not 1<=len(place.strip())<=200:return jsonify(message='请填写标准地点'),400
+    for axis in ('x','y'):
+        v=pos.get(axis)
+        if isinstance(v,bool) or not isinstance(v,(int,float)) or not math.isfinite(v) or not 0<=v<=100:return jsonify(message='坐标应为0—100'),400
+    position={'x':round(pos['x'],2),'y':round(pos['y'],2),'地图标准地点':place.strip()}
+    row=store.write('maoyuan_map_areas',name.strip(),position,p.get('_version'))
+    return jsonify(status='success',area=name.strip(),position=row['data'],version=str(row['revision']))
 
 
+@app.route('/api/public/cats',methods=['POST'])
+@app.route('/api/public/cats/<int:cat_id>',methods=['PUT'])
+def save_cat(cat_id=None):
+    if not store.rows('maoyuan_cats'):
+        return jsonify(message='云端尚未完成迁移，请管理员先完成迁移，不要重新录入旧档案'),503
+    p=request.get_json(silent=True)
+    if not isinstance(p,dict):return jsonify(message='无效资料'),400
+    submission = None
+    if cat_id is None:
+        try: submission = str(uuid.UUID(str(p.get('submission_id',''))))
+        except ValueError:return jsonify(message='请刷新编辑页后重新提交'),400
+        existing=store.rows('maoyuan_cats',{'data->>_submission_id':'eq.'+submission})
+        if existing:return jsonify(status='success',cat=cat_view(existing[0])),200
+    previous=store.cat(cat_id) if cat_id is not None else None
+    if cat_id is not None and previous is None:return jsonify(message='找不到猫咪'),404
+    if previous and str(p.get('_version'))!=str(previous['revision']):raise CloudError(409)
+    data=dict(previous['data']) if previous else {}
+    for field,limit in FIELDS.items():
+        value=p.get(field,data.get(field,''))
+        if not isinstance(value,str) or len(value.strip())>limit:return jsonify(message=field+'格式无效或过长'),400
+        data[field]=value.strip()
+    if not data['名字'] or not data['活动区域']:return jsonify(message='请填写名字和活动区域'),400
+    if p.get('photo_data'):
+        raw,mime,ext=parse_image(p['photo_data']);name='public-'+uuid.uuid4().hex+ext
+        store.upload(name,raw,mime);data['照片']=name
+    elif not previous:return jsonify(message='新增猫咪请提供照片'),400
+    data.pop('id',None);data.pop('_version',None)
+    if submission:data['_submission_id']=submission
+    data['猫苑评价']=[];data['匹配状态']='待匹配'
+    row=store.write('maoyuan_cats',cat_id,data,previous['revision'] if previous else None)
+    print('CLOUD_CAT_SAVED id=%s revision=%s' % (row['id'],row['revision']),flush=True)
+    return jsonify(status='success',cat=cat_view(row)),200 if previous else 201
 
-from werkzeug.utils import secure_filename
-# 上传图片
 
-@app.route(
-    "/api/upload",
-    methods=["POST"]
-)
-def upload():
-
-
-    file = request.files["file"]
-
-
-    filename = secure_filename(
-        file.filename
-    )
-
-
-    save_path = os.path.join(
-        IMAGE_FOLDER,
-        filename
-    )
+@app.route('/api/public/cats/<int:cat_id>/match',methods=['POST'])
+def match_cat(cat_id):
+    row=store.cat(cat_id)
+    if not row:return jsonify(message='找不到猫咪'),404
+    p=request.get_json(silent=True) or {}
+    if str(p.get('_version'))!=str(row['revision']):raise CloudError(409)
+    if not match_lock.acquire(blocking=False):return jsonify(message='另一个匹配任务正在进行，档案已保存，请稍后重试匹配'),429
+    try:
+        from cat_match_v2 import match_catyuan
+        cat=cat_view(row)
+        results=match_catyuan(cat,existing_cats=[c for c in cats() if c['id']!=cat_id])
+        data=dict(row['data'],猫苑评价=results,匹配状态='完成')
+        updated=store.write('maoyuan_cats',cat_id,data,row['revision'])
+        return jsonify(status='success',cat=cat_view(updated))
+    except CloudError:raise
+    except Exception:
+        app.logger.exception('CLOUD_MATCH_FAILED id=%s',cat_id)
+        return jsonify(message='档案和照片已保存，匹配未完成，可稍后单独重试'),500
+    finally:match_lock.release()
 
 
-    file.save(save_path)
+@app.route('/images/<path:name>')
+def image(name):
+    if '/' in name or '\\' in name or name.startswith('.'):abort(404)
+    raw,mime=store.image(name)
+    return Response(raw,content_type=mime,headers={'Cache-Control':'public,max-age=3600','X-Content-Type-Options':'nosniff'})
 
 
-    return jsonify(
-        {
-            "status":"success",
-            "filename":filename
-        }
-    )
-# 添加猫咪
+@app.route('/api/storage_status')
+def storage_status():
+    return jsonify(storage='supabase',cats=len(cats()),areas=len(maps()[0]))
 
-@app.route("/api/add_cat", methods=["POST"])
-def add_cat():
 
-    import time
+@app.route('/admin_login',methods=['GET','POST'])
+def admin_login():
+    if request.method=='GET':return send_from_directory('.','admin_login.html')
+    password=os.environ.get('ADMIN_PASSWORD')
+    if password and request.form.get('username')==os.environ.get('ADMIN_USERNAME','admin') and request.form.get('password')==password:
+        session['admin_logged_in']=True;return redirect('/admin')
+    return '登录失败，请检查账号和密码',401
 
-    total_start = time.perf_counter()
 
-    print("\n==============================")
-    print("🐱 开始新增猫咪")
-    print("==============================")
+@app.route('/admin')
+def admin():
+    if not session.get('admin_logged_in'):return redirect('/admin_login')
+    return send_from_directory('.','admin.html')
 
-    # ① 接收前端数据
-    step_start = time.perf_counter()
 
-    new_cat = request.json
+@app.route('/admin_logout')
+def logout():session.clear();return redirect('/')
 
-    print(
-        f"① 接收猫咪数据："
-        f"{time.perf_counter() - step_start:.3f} 秒"
-    )
 
-    # ② 读取猫咪数据库
-    step_start = time.perf_counter()
-
-    with open(
-        DATA_FILE,
-        "r",
-        encoding="utf-8"
-    ) as f:
-        cats = json.load(f)
-
-    print(
-        f"② 读取 cats_detail.json："
-        f"{time.perf_counter() - step_start:.3f} 秒"
-    )
-
-    # ③ 分配 ID
-    step_start = time.perf_counter()
-
-    if cats:
-        new_cat["id"] = max(
-            item["id"] for item in cats
-        ) + 1
-    else:
-        new_cat["id"] = 1
-
-    print(
-        f"③ 分配 ID："
-        f"{time.perf_counter() - step_start:.3f} 秒"
-    )
-
-    # ④ 《猫苑》自动匹配
-    step_start = time.perf_counter()
-
-    print("④ 开始进行《猫苑》匹配……")
-
-    new_cat["猫苑评价"] = match_catyuan(new_cat, existing_cats=cats)
-
-    print(
-        f"④ 《猫苑》匹配完成："
-        f"{time.perf_counter() - step_start:.3f} 秒"
-    )
-
-    # ⑤ 加入数据库
-    step_start = time.perf_counter()
-
-    cats.append(new_cat)
-
-    print(
-        f"⑤ 加入猫咪数据库："
-        f"{time.perf_counter() - step_start:.3f} 秒"
-    )
-
-    # ⑥ 写回 JSON
-    step_start = time.perf_counter()
-
-    with open(
-        DATA_FILE,
-        "w",
-        encoding="utf-8"
-    ) as f:
-        json.dump(
-            cats,
-            f,
-            ensure_ascii=False,
-            indent=4
-        )
-
-    print(
-        f"⑥ 写入 cats_detail.json："
-        f"{time.perf_counter() - step_start:.3f} 秒"
-    )
-
-    # ⑦ 总耗时
-    total_time = (
-        time.perf_counter()
-        - total_start
-    )
-
-    print(
-        f"🐱 新增猫咪完成！"
-        f"总耗时：{total_time:.3f} 秒"
-    )
-
-    print("==============================\n")
-
-    return jsonify({
-        "status": "success",
-        "id": new_cat["id"]
-    })
-
-@app.route("/api/delete_cat/<int:cat_id>", methods=["DELETE"])
+@app.route('/api/delete_cat/<int:cat_id>',methods=['DELETE'])
 def delete_cat(cat_id):
+    if not session.get('admin_logged_in'):return jsonify(message='请先登录管理员'),401
+    store.request('DELETE','/rest/v1/maoyuan_cats?id=eq.'+str(cat_id));return jsonify(status='success')
 
-    with open(
-        DATA_FILE,
-        "r",
-        encoding="utf-8"
-    ) as f:
-        cats = json.load(f)
 
-    cats = [
-        cat
-        for cat in cats
-        if cat["id"] != cat_id
-    ]
+# Do not let old administrative writes silently update ephemeral JSON files.
+@app.route('/api/add_cat',methods=['POST'])
+@app.route('/api/update_cat/<int:cat_id>',methods=['PUT'])
+@app.route('/api/map_areas',methods=['POST'])
+@app.route('/api/upload',methods=['POST'])
+@app.route('/api/rematch_all',methods=['POST'])
+def legacy_write(cat_id=None):
+    return jsonify(message='云端版请使用相猫台新增/编辑/地图及逐只匹配，旧版批量写入接口已停用，避免误写临时文件'),410
 
-    with open(
-        DATA_FILE,
-        "w",
-        encoding="utf-8"
-    ) as f:
-        json.dump(
-            cats,
-            f,
-            ensure_ascii=False,
-            indent=4
-        )
 
-    return jsonify({
-        "status": "success"
-    })
-
-# =========================
-# 修改猫咪信息
-# =========================
-
-@app.route("/api/update_cat/<int:cat_id>", methods=["PUT"])
-@login_required
-def update_cat(cat_id):
-    data = request.get_json(silent=True)
-
-    if data is None:
-        return jsonify({
-            "status": "error",
-            "message": "没有收到有效的猫咪数据"
-        }), 400
-
-    # 读取猫咪数据库
+@app.route('/admin/migration', methods=['GET','POST'])
+def admin_migration():
+    if not session.get('admin_logged_in'):return redirect('/admin_login')
+    from migration import prepare,migrate
+    if request.method=='POST':
+        if request.form.get('confirm')!='IMPORT':return jsonify(message='请在确认框输入IMPORT'),400
+        try:return jsonify(status='success',result=migrate(store,Path(__file__).parent))
+        except ValueError as e:return jsonify(message=str(e)),400
     try:
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            cats = json.load(f)
-    except Exception as e:
-        print(f"读取猫咪数据库失败：{e}")
-        return jsonify({
-            "status": "error",
-            "message": "读取猫咪数据库失败"
-        }), 500
+        seed,areas,photos=prepare(Path(__file__).parent)
+        summary={'cloud_cats':len(store.rows('maoyuan_cats')),'cloud_areas':len(store.rows('maoyuan_map_areas')),
+                 'planned_cats':[{'id':c['id'],'名字':c['名字']} for c in seed], 'planned_areas':len(areas),'photos':len(photos)}
+    except ValueError as e:return jsonify(message=str(e)),400
+    from markupsafe import escape
+    return '<meta charset="utf-8"><h2>迁移预检</h2><pre>'+str(escape(json.dumps(summary,ensure_ascii=False,indent=2)))+'</pre><p>只允许向空表导入，不覆盖云端已有档案。确认名单和照片完整后输入IMPORT。</p><form method="post"><input name="confirm" required><button>导入云端</button></form>'
 
-    # 查找猫咪
-    target_cat = None
 
-    for cat in cats:
-        if cat["id"] == cat_id:
-            target_cat = cat
-            break
+@app.errorhandler(400)
+def bad_input(error):
+    return jsonify(message='提交资料格式无效，请检查字段与图片'),400
 
-    if target_cat is None:
-        return jsonify({
-            "status": "error",
-            "message": "没有找到这只猫咪"
-        }), 404
 
-    # 更新基本信息
-    fields = [
-        "名字",
-        "活动区域",
-        "性格",
-        "常见行为",
-        "毛色",
-        "体型",
-        "发现地点",
-        "备注"
-    ]
+@app.route('/<path:path>')
+def static_files(path):
+    allowed={'style.css','script.js','detail.js','admin.js','detail.html','favicon.svg'}
+    if path not in allowed:abort(404)
+    return send_from_directory('.',path)
 
-    for field in fields:
-        if field in data:
-            target_cat[field] = data[field]
 
-    # 保存猫咪资料，不在这里重新加载语义匹配模型
-    try:
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(
-                cats,
-                f,
-                ensure_ascii=False,
-                indent=4
-            )
-    except Exception as e:
-        print(f"保存猫咪资料失败：{e}")
-        return jsonify({
-            "status": "error",
-            "message": "保存猫咪资料失败"
-        }), 500
-
-    print(f"🐱 猫咪资料修改成功：{target_cat.get('名字', '未命名')}")
-
-    return jsonify({
-        "status": "success",
-        "id": cat_id,
-        "message": "猫咪资料修改成功；《猫苑》评价暂未重新匹配"
-    }), 200
-
-# =========================
-# 重新匹配全部猫咪
-# =========================
-
-@app.route(
-    "/api/rematch_all",
-    methods=["POST"]
-)
-def rematch_all():
-
-    try:
-
-        # 读取猫咪数据库
-        with open(
-            DATA_FILE,
-            "r",
-            encoding="utf-8"
-        ) as f:
-
-            cats = json.load(f)
-
-        print("开始重新匹配所有猫咪")
-        print("猫咪数量：", len(cats))
-
-        rematch_cats(cats)
-
-        # 保存
-        with open(
-            DATA_FILE,
-            "w",
-            encoding="utf-8"
-        ) as f:
-
-            json.dump(
-                cats,
-                f,
-                ensure_ascii=False,
-                indent=4
-            )
-
-        print("所有猫咪重新匹配完成")
-
-        return jsonify(
-            {
-                "status": "success",
-                "count": len(cats)
-            }
-        )
-
-    except Exception as e:
-
-        import traceback
-
-        print("重新匹配失败！")
-        print("错误：", e)
-
-        traceback.print_exc()
-
-        return jsonify(
-            {
-                "status": "error",
-                "message": str(e)
-            }
-        ), 500
-
-# Legacy administrator operations must not bypass public validation or race public edits.
-from flask import g
-from public_editor import locked
-
-@app.before_request
-def protect_legacy_writes():
-    if request.method in {"POST", "PUT", "DELETE", "PATCH"} and request.path.startswith("/api/") and not request.path.startswith("/api/public/"):
-        if not session.get("admin_logged_in"):
-            return jsonify(status="error", message="管理员操作请先登录"), 401
-        g.cat_write_lock = locked()
-        g.cat_write_lock.__enter__()
-
-@app.teardown_request
-def release_legacy_lock(error):
-    lock = g.pop("cat_write_lock", None)
-    if lock:
-        lock.__exit__(None, None, None)
-
-# Public contributor UI and API share the Render origin.
-from public_editor import register_public_editor
-register_public_editor(app, DATA_FILE, IMAGE_FOLDER, match_catyuan, MAP_AREAS_FILE)
-
-if __name__=="__main__":
-
-    app.run(
-        host="0.0.0.0",
-        port=5000,
-        debug=True
-    )
+if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT','5000')))
