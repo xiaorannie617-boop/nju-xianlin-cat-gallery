@@ -5,6 +5,7 @@ import math
 import os
 from pathlib import Path
 import threading
+from time import perf_counter
 import uuid
 from flask import Flask, Response, abort, jsonify, redirect, request, send_from_directory, session
 from cloud_store import Store, CloudError, cat_view
@@ -137,11 +138,17 @@ def match_cat(cat_id):
     if str(p.get('_version'))!=str(row['revision']):raise CloudError(409)
     if not match_lock.acquire(blocking=False):return jsonify(message='另一个匹配任务正在进行，档案已保存，请稍后重试匹配'),429
     try:
+        started=perf_counter()
         from cat_match_v2 import match_catyuan
+        imported=perf_counter()
         cat=cat_view(row)
-        results=match_catyuan(cat,existing_cats=[c for c in cats() if c['id']!=cat_id])
+        existing=[c for c in cats() if c['id']!=cat_id]
+        loaded=perf_counter()
+        results=match_catyuan(cat,existing_cats=existing)
+        matched=perf_counter()
         data=dict(row['data'],猫苑评价=results,匹配状态='完成')
         updated=store.write('maoyuan_cats',cat_id,data,row['revision'])
+        print('CLOUD_MATCH_TIMING id=%s import=%.2fs read=%.2fs match=%.2fs write=%.2fs' % (cat_id,imported-started,loaded-imported,matched-loaded,perf_counter()-matched),flush=True)
         return jsonify(status='success',cat=cat_view(updated))
     except CloudError:raise
     except Exception:

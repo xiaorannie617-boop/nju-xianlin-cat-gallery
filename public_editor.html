@@ -44,10 +44,11 @@ function showPhoto(src){$('preview').hidden=!src;if(src)$('preview').src=src;els
 function fill(cat){keys.forEach(k=>field(k).value=cat?.[k]||'');current=cat;picture='';$('photo').value='';showPhoto(cat?.照片?'/images/'+encodeURIComponent(cat.照片):'');dirty=false;syncArea();if(cat)emitProfile(cat);else{syncSerial++;notify('maoyuan:clear',{});}}
 function notify(type,data){if(window.parent!==window)window.parent.postMessage({type,...data},parentOrigin);}
 async function emitProfile(cat){
+ if(window.parent===window)return;
  const serial=++syncSerial;
  try{
   if(!cat.照片)throw Error('图鉴档案缺少照片，请先补充照片并保存。');
-  const response=await fetch('/images/'+encodeURIComponent(cat.照片),{cache:'no-store'});
+  const response=await fetch('/images/'+encodeURIComponent(cat.照片),);
   if(!response.ok)throw Error('档案已保存，但照片读取失败，请重新同步。');
   const blob=await response.blob();
   if(blob.size>10*1024*1024||!['image/jpeg','image/png','image/webp'].includes(blob.type.split(';')[0]))throw Error('档案照片格式不支持或超过10 MB。');
@@ -63,6 +64,46 @@ window.addEventListener('message',event=>{
 });
 
 async function load(selectId){try{const response=await fetch('/api/public/cats',{cache:'no-store'});if(!response.ok)throw Error('档案列表读取失败');cats=await response.json();$('cat').replaceChildren(new Option('请选择',''));cats.forEach(c=>$('cat').add(new Option(c.名字+' · '+c.活动区域,String(c.id))));if(selectId){$('cat').value=String(selectId);fill(cats.find(c=>c.id===selectId));}status('');}catch(e){status(e.message+'，请稍后重新载入。','error');}}
+function applySaved(cat){
+ const index=cats.findIndex(item=>item.id===cat.id);
+ if(index<0)cats.push(cat);else cats[index]=cat;
+ const select=$('cat');
+ const option=Array.from(select.options).find(item=>item.value===String(cat.id));
+ const label=cat.名字+' · '+cat.活动区域;
+ if(option)option.textContent=label;else select.add(new Option(label,String(cat.id)));
+ select.value=String(cat.id);
+ fill(cat);
+}
+async function preparePhoto(source){
+ const blob=typeof source==='string'?await (await fetch(source)).blob():source;
+ if(blob.size<=600*1024)return source;
+ const url=URL.createObjectURL(blob);
+ try{
+  const image=new Image();image.src=url;await image.decode();
+  const scale=Math.min(1,1600/Math.max(image.naturalWidth,image.naturalHeight));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));
+  canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
+  const context=canvas.getContext('2d');
+  context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);
+  context.drawImage(image,0,0,canvas.width,canvas.height);
+  let output;
+  for(const quality of [0.86,0.76,0.66]){
+   output=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',quality));
+   if(output&&output.size<=600*1024)break;
+  }
+  return output&&output.size<blob.size?output:source;
+ }finally{URL.revokeObjectURL(url);}
+}
+async function uploadPhoto(source){
+ let photo=source;
+ try{photo=await preparePhoto(source);}catch(error){console.warn('Photo compression unavailable',error);}
+ if(typeof photo==='string')return photo;
+ return new Promise((resolve,reject)=>{
+  const reader=new FileReader();reader.onload=()=>resolve(reader.result);
+  reader.onerror=()=>reject(Error('图片读取失败'));reader.readAsDataURL(photo);
+ });
+}
 function importDraft(){if(!draft)return;keys.forEach(k=>{if(typeof draft[k]==='string')field(k).value=draft[k];});if(draft.photo_data){picture=draft.photo_data;showPhoto(picture);}dirty=true;status('已带入相猫台的名字、照片、外观和小记，请补充活动区域、性格与行为。');}
 $('mode').onchange=()=>{$('existing').hidden=$('mode').value!=='edit';fill(null);if($('mode').value==='new'&&draft)importDraft();};
 $('cat').onchange=()=>fill(cats.find(c=>String(c.id)===$('cat').value)||null);
@@ -77,21 +118,22 @@ async function matchSaved(cat){
   const response=await fetch('/api/public/cats/'+cat.id+'/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({_version:cat._version})});
   let result;try{result=await response.json();}catch{throw Error('匹配服务中断，但档案已保存。请重新载入列表后单独重试匹配，不要重复新增。');}
   if(!response.ok)throw Error(result.message||'匹配未完成，档案已保存');
-  await load(result.cat.id);status('云端档案和古籍匹配已保存，正在同步猫谱。','success');
+  applySaved(result.cat);status('云端档案和古籍匹配已保存，正在同步猫谱。','success');
  }catch(e){status(e.message,'error');}
 }
 function controls(disabled){busy=disabled;form.setAttribute('aria-busy',String(disabled));Array.from(document.querySelectorAll('input,textarea,select,button')).forEach(e=>e.disabled=disabled);}
 $('rematch').onclick=async()=>{if(busy)return;if(!current||dirty){status('请先选择已保存的猫咪；有修改时请先保存档案。','error');return;}controls(true);try{await matchSaved(current);}finally{controls(false);}};
 form.onsubmit=async event=>{
  event.preventDefault();if(busy)return;if($('mode').value==='edit'&&!current){status('请先选择猫咪。','error');return;}
- const data=Object.fromEntries(keys.map(k=>[k,field(k).value.trim()]));if(!current){let token=sessionStorage.getItem('maoyuan-pending-submit');if(!token){token=crypto.randomUUID();sessionStorage.setItem('maoyuan-pending-submit',token);}data.submission_id=token;}if(picture)data.photo_data=picture;if(current)data._version=current._version;
+ const data=Object.fromEntries(keys.map(k=>[k,field(k).value.trim()]));if(!current){let token=sessionStorage.getItem('maoyuan-pending-submit');if(!token){token=crypto.randomUUID();sessionStorage.setItem('maoyuan-pending-submit',token);}data.submission_id=token;}if(current)data._version=current._version;
  controls(true);status('正在把档案和照片保存到云端…');
  try{
+  if(picture)data.photo_data=await uploadPhoto(picture);
   const response=await fetch('/api/public/cats'+(current?'/'+current.id:''),{method:current?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
   let result;try{result=await response.json();}catch{throw Error('未收到保存结果，请先重新载入列表确认是否已保存，勿重复新增。');}
   if(!response.ok)throw Error(result.message||'保存失败');
-  sessionStorage.removeItem('maoyuan-pending-submit');current=result.cat;picture='';dirty=false;$('mode').value='edit';$('existing').hidden=false;notify('maoyuan:saved',{cat:result.cat});emitProfile(result.cat);
-  await load(result.cat.id);await matchSaved(result.cat);
+  sessionStorage.removeItem('maoyuan-pending-submit');$('mode').value='edit';$('existing').hidden=false;notify('maoyuan:saved',{cat:result.cat});applySaved(result.cat);
+  await matchSaved(result.cat);
  }catch(e){status(e.message,'error');}finally{controls(false);}
 };
 
