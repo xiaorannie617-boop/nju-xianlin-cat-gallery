@@ -1,4 +1,7 @@
 import re
+from pathlib import Path
+import json
+import tempfile
 import threading
 from functools import wraps
 from collections import Counter
@@ -16,7 +19,9 @@ import os
 
 LOCAL_MODEL_PATH = r"C:\Users\20693\.cache\modelscope\models\AI-ModelScope--bge-small-zh-v1.5\snapshots\master"
 
-if os.path.exists(LOCAL_MODEL_PATH):
+if os.getenv("MAOYUAN_MODEL_PATH"):
+    MODEL_PATH = os.environ["MAOYUAN_MODEL_PATH"]
+elif os.path.exists(LOCAL_MODEL_PATH):
     print("使用本地《猫苑》匹配模型：", LOCAL_MODEL_PATH)
     MODEL_PATH = LOCAL_MODEL_PATH
 else:
@@ -92,10 +97,46 @@ def serialized_initialization(func):
     return wrapper
 
 
+CACHE_PATH = Path(__file__).with_name("maoyuan_vectors.npz")
+MODEL_KEY = os.getenv("MAOYUAN_MODEL_KEY", "BAAI/bge-small-zh-v1.5")
+REVISION = os.getenv("MAOYUAN_MODEL_REVISION")
+CACHE_KEY = hashlib.sha256(json.dumps(
+    [MODEL_KEY, REVISION, "normalized-v1", sentences], ensure_ascii=False,
+    default=str, sort_keys=True,
+).encode("utf-8")).hexdigest()
+
+
+def load_vectors(dimension):
+    try:
+        with np.load(CACHE_PATH, allow_pickle=False) as cached:
+            if cached["key"].item() != CACHE_KEY:
+                raise ValueError("cache key mismatch")
+            vectors = cached["vectors"]
+            if (vectors.shape != (len(sentences), dimension)
+                    or vectors.dtype != np.float32 or not np.isfinite(vectors).all()):
+                raise ValueError("invalid vector array")
+            return vectors
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError, KeyError, EOFError) as error:
+        print(f"MAOYUAN_VECTOR_CACHE_INVALID {error}", flush=True)
+        return None
+
+
+def save_vectors():
+    with tempfile.NamedTemporaryFile(dir=CACHE_PATH.parent, suffix=".npz", delete=False) as handle:
+        temporary = Path(handle.name)
+    try:
+        np.savez_compressed(temporary, key=CACHE_KEY, vectors=maoyuan_vectors)
+        temporary.replace(CACHE_PATH)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 @serialized_initialization
-def initialize_model():
+def initialize_model(*, rebuild=False):
     global model, maoyuan_vectors
-    if model is not None and maoyuan_vectors is not None:
+    if not rebuild and model is not None and maoyuan_vectors is not None:
         return
     # Import the heavy runtime only when a match is actually requested.
     print("正在加载《猫苑》匹配模型（CPU低内存模式）……", flush=True)
@@ -103,9 +144,14 @@ def initialize_model():
     import torch
     from sentence_transformers import SentenceTransformer
     torch.set_num_threads(1)
-    pending_model = SentenceTransformer(MODEL_PATH, device="cpu")
+    pending_model = SentenceTransformer(MODEL_PATH, device="cpu", **({"revision": REVISION} if REVISION else {}))
     pending_model.eval()
-    pending_vectors = None
+    pending_vectors = None if rebuild else load_vectors(pending_model.get_sentence_embedding_dimension())
+    if pending_vectors is not None:
+        model, maoyuan_vectors = pending_model, pending_vectors
+        print(f"MAOYUAN_VECTOR_CACHE_HIT sentences={len(sentences)}", flush=True)
+        return
+    print("MAOYUAN_VECTOR_CACHE_MISS", flush=True)
     total = len(sentences)
     print(f"正在预计算《猫苑》句子向量：共{total}句，每批1句……", flush=True)
     # Keep the existing model, sentence text, normalization and scoring unchanged.
