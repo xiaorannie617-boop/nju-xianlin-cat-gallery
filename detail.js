@@ -247,7 +247,7 @@ function showDetail() {
 // 返回首页
 function goBack() {
 
-    window.location.href = "index.html";
+    window.location.assign("/");
 }
 
 

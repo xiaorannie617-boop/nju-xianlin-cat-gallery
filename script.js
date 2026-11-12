@@ -302,9 +302,10 @@ function showCats(catList = cats) {
             >
 
                 <img
-                    src="images/${escapeHtmlAttribute(cat["照片"] || "default.jpg")}"
+                    loading="lazy" decoding="async"
+                    src="/thumbnails/${escapeHtmlAttribute(encodeURIComponent(cat["照片"] || "default.jpg"))}"
                     alt="${escapeHtmlAttribute(cat["名字"] || "猫咪")}"
-                    onerror="this.onerror=null; this.src='images/default.jpg';"
+                    onerror="this.onerror=null; this.src=this.getAttribute('src').replace('/thumbnails/', '/images/');"
                 >
 
 

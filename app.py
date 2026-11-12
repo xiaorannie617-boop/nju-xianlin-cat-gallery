@@ -1,11 +1,14 @@
 """猫苑图鉴 Supabase持久化版：沿用原网页与低内存匹配模块。"""
 import base64
+from functools import lru_cache
+from io import BytesIO
 import json
 import math
 import os
 from pathlib import Path
 import threading
 from time import perf_counter
+from urllib.parse import quote
 import uuid
 from flask import Flask, Response, abort, jsonify, redirect, request, send_from_directory, session
 from cloud_store import Store, CloudError, cat_view
@@ -53,6 +56,7 @@ def parse_image(value):
 
 
 @app.route('/')
+@app.route('/index.html')
 def index(): return send_from_directory('.', 'index.html')
 
 
@@ -162,6 +166,42 @@ def image(name):
     if '/' in name or '\\' in name or name.startswith('.'):abort(404)
     raw,mime=store.image(name)
     return Response(raw,content_type=mime,headers={'Cache-Control':'public,max-age=3600','X-Content-Type-Options':'nosniff'})
+
+
+@lru_cache(maxsize=64)
+def thumbnail(name):
+    from PIL import Image, ImageOps
+
+    raw, mime = store.image(name)
+    try:
+        with Image.open(BytesIO(raw)) as photo:
+            # Limit decoding memory on the small Render worker.
+            if photo.width * photo.height > 12_000_000:
+                return None
+            photo.draft("RGB", (480, 480))
+            oriented = ImageOps.exif_transpose(photo)
+            oriented.thumbnail((480, 480), Image.Resampling.LANCZOS)
+            output = BytesIO()
+            oriented.save(output, format="WEBP", quality=78, method=2)
+            if output.tell() < len(raw):
+                return output.getvalue(), "image/webp"
+    except (OSError, ValueError, Image.DecompressionBombError):
+        return None
+    return None
+
+
+@app.route('/thumbnails/<path:name>')
+def image_thumbnail(name):
+    if '/' in name or chr(92) in name or name.startswith('.'):
+        abort(404)
+    result = thumbnail(name)
+    if result is None:
+        return redirect('/images/' + quote(name, safe=''))
+    raw, mime = result
+    return Response(raw, content_type=mime, headers={
+        'Cache-Control': 'public, max-age=3600',
+        'X-Content-Type-Options': 'nosniff',
+    })
 
 
 @app.route('/api/storage_status')
